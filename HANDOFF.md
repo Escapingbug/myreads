@@ -138,7 +138,7 @@
 - 模型对照与原文保存在 `artifacts/narration-fix/`。六段小说式样例，Java Random 与 Android 音频采样顺序一致；比较旧切分、固定前缀、固定官方参考及确定结束标记。三种声音 Xiaoyu / Junhao / Yuewen 各六段的最终策略样例未触发帧上限；使用 faster-whisper small 本机识别作内容诊断，有同音字、标点和少量词语识别误差，不是人工听感评分，不把 ASR 误字当成已确认的 TTS 错读。ASR 及其模型仅在本机 artifacts 下，不打包或下载到 App。
 - 实际 Android 最终样例 `android-final-dialogue.wav` 为 48kHz / mono / 16-bit，包含标题及三段原文，共 22.614 秒；四单元 23 / 50 / 88 / 99 帧，约 6.8 / 12.7 / 20.3 / 23.9 秒有效生成。ASR 中这组段首内容及完整末句可识别，未再次出现固定前缀实验里的那处短语重复。整章准备后播放完成，准备时不提前推进段落；缓存回放不打开 ONNX，系统媒体暂停 / 继续可用。对四单元完整解码原始样本逐片核对，最终 WAV 完整保留原始 PCM，只添加 160 / 642 / 490 / 522ms 的起始静音；跨平台量化最大差 1 LSB。实体手机、用户具体小说及更长文本仍需要试听验证。
 
-- 0.3.3 已公开发布：<https://github.com/Escapingbug/myreads/releases/tag/v0.3.3>；标签提交 `13338186cc2ee5a78baf1b719fa2c960ccdb1f5a`，流水线 <https://github.com/Escapingbug/myreads/actions/runs/36857367143> 成功，69 项测试通过。实际线上 APK 58,820,007 bytes，SHA-256 `4d6ac1713d5666c6188691654771e0de92d0db89415ed73fafc35adfb32cfe01`；发布资产、update.json、SHA256SUMS 一致，`release/` 已下载实际线上资产。证书 SHA-256 与 0.3.2 相同（`a0abb5c432d5ada068efe059a63c1ec4adef40754a915559e0520538124c1112`），APK 不含模型权重，无 DEBUGGABLE 标记。
+- 0.3.3 已公开发布：<https://github.com/Escapingbug/myreads/releases/tag/v0.3.3>；标签提交 `13338186cc2ee5a78baf1b719fa2c960ccdb1f5a`，流水线 <https://github.com/Escapingbug/myreads/actions/runs/36857367143> 成功，69 项测试通过。实际线上 APK 58,820,007 bytes，SHA-256 `4d6ac1713d5666c6188691654771e0de92d0db89415ed73fafc35adfb32cfe01`；发布资产、update.json、SHA256SUMS 一致，`release/` 已下载实际线上资产。证书 SHA-256 与 0.3.2 相同（`a0abb5c432d5ada068efe059a63c1ec4adef40754a915559e0520538124c1112`），APK 不含模型权重，无 DEBUGGABLE 标记。实际线上 APK 已覆盖安装到 API35 模拟器，书架仍有山间来信及第三章阅读记录；已查看听书页截图，模型仍显示“已下载，可离线使用”。测试前原生 chapter2 / paragraph18 位置已还原，临时测试章节已清理。截图 `artifacts/narration-fix/release-shelf.png` / `release-model.png`。
 
 ## 运行方法
 
