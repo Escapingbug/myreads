@@ -12,7 +12,7 @@
 
 ## 当前完成状态
 
-阅读、听书和更新功能已经实现。0.3.0 已由 GitHub Actions 构建并公开发布，模拟器应用内下载与系统覆盖安装验证通过；尚未在实体手机上测试。
+阅读、听书和更新功能已经实现。0.3.1 已由 GitHub Actions 构建并公开发布，模拟器应用内下载与系统覆盖安装验证通过；尚未在实体手机上测试。长篇朗读算法调研已完成，0.3.2 的上下文续读、停顿校准和时长缓冲已实现，正在完成验证与发布；详见下文。
 
 - `src/App.vue`、`src/style.css`：移动端书架、继续阅读、搜索及分页、详情和完整目录预览、下载管理、ZIP/JSON/HTTPS 书源导入确认、启停与卸载、错误/空态、删除确认、原生返回键和应用生命周期。
 - `src/components/Reader.vue`：本地单章上下滚动、上下章、目录跳章、字号、行距、纸色/明亮/夜读、自动保存章节/段落/段内位置。未下载章节禁用。
@@ -92,6 +92,33 @@
 - 停止后重新从已生成的段落听书，实测约 0.93 秒进入 PLAYING，记录 `Reusing cached audio`，未生成新音频；随后停止，系统无唤醒锁。记录在 `cache-replay-verification.json`。较长片段首次生成仍需要等待，未保证所有手机能实时连续合成。
 - 已发布 <https://github.com/Escapingbug/myreads/releases/tag/v0.3.1>；标签流水线 <https://github.com/Escapingbug/myreads/actions/runs/36805074813> 成功，49 项测试通过。线上 APK 为 58,801,928 字节，SHA-256 `661f86a58ca084a9e22816a0b36699e8b1de358baebdefac4e67da465ab27de6`，清单与 GitHub 资产一致，证书沿用 0.3.0。`release/` 已同步实际 GitHub APK/清单/校验文件。模型仍不在 APK 中。
 - 实际线上非调试 APK 已覆盖安装到 API35 模拟器，版本 0.3.1 / code6，无 DEBUGGABLE 标记；原书架及第三章阅读记录保留，模型仍显示已下载可离线使用。未重新下载模型。截图在 `release-0.3.1-*.png`。
+
+## 长篇朗读接入（0.3.2，2026-10-01）
+
+- `NarrationPlanner` 从原文保留完整句、疑问/省略号、段落、标题及对白标记，再应用已有标点/数字归一化。短对白与常见叙述尾句一起生成；实际 SentencePiece token 上限 75、估计时长上限 22s，超长句优先在分句或单词边界拆分。375 帧上限仍仅触发缩小重试，不播放截断输出。
+- `NarrationPrompt` 按官方 continuation 模板在 user 中放“上一句完整文本 + 当前文本”，在 assistant 的 audio_start 后放上一句生成的音频 token（slot 9）。每次仅保留上一完整单元，段落/章节/跳转重新使用所选预设音色；不会让全书上下文无限增长，也不重新编码已有 WAV。前缀只作上下文，输出只含当前单元的音频。
+- `CodecStreamDecoder` 使用官方 decode_step 图及元数据中的有界 transformer/attention 状态；连续生成复用状态，缓存命中转生成时仅预热上一单元一次。`SpeechEdges` 使用固定版本 Silero VAD 16k op15 模型，48k 音频经 3:1 降采样、512 + 64 上下文窗口检测首尾，阈值 0.25。`NarrationTiming` 仅校准外部静音，保留句内 PCM、96ms 两侧保护余量；检测不确定时保留整段音频。句段类型对应区间，不足时补零、过长时只移除检测边缘；保护余量优先，实际停顿可超过目标上限。尚未做真人听感评分或 ASR 完整性评测。
+- `NarrationBuffer` 以有效生成耗时/音频时长测量 RTF，缓存命中及用户暂停时间不计入；保存在设备偏好中。自动模式 RTF × 倍速 ≥ 0.9 时准备整章并一次提交队列；边生成模式准备约 10 秒可播放声音后起播，按 30–90 秒目标缓冲。章节间仍可能等待，不承诺慢设备实时。准备进度不推进实际阅读位置。用户可以选择 auto / stream / chapter，下次开始生效。
+- 缓存版本 `narration-context-v1`：WAV 与 `.codes` sidecar 一起存储；键包含正文、结构、音色、续读模式及前文文字/token/尾停顿摘要。旧 WAV 不会被当成新算法缓存，模型不失效。缓存回放不加载 ONNX；128 MiB 淘汰同时清理 sidecar，正在播放及未提交的整章文件保留，超长待播章节可暂时超过预算。空间不足会明确报错。
+- 准备完成后释放模型；暂停保留推理状态并释放合成唤醒锁。准备阶段通过 MediaSession 的 ForwardingPlayer 暴露 BUFFERING，使首个 WAV 入队前也能用系统媒体/锁屏暂停。按用户播放意图暂停 producer，不通过内部暂停播放器阻止起播，避免互相等待。
+- 下载目录和模型 id 不变。清单仅增加 decode_step（351,400 bytes，共享已有数据）和 Silero VAD（1,289,603 bytes）；合计新增 1,641,003 bytes，约 1.6 MiB。模型共 719,055,289 bytes，685.7 MiB，依然由用户点击下载，APK 无模型。Silero 固定提交 `1e261b036686cd0017d500ee96acd1c4ba572a9d`，SHA-256 `7ed98ddbad84ccac4cd0aeb3099049280713df825c610a8ed34543318f1b2c49`，MIT 许可证在 assets/tts 中。模拟器“继续下载”后旧 11 文件大小/mtime 全部不变，仅下载两文件并校验。
+- 验证记录在 `artifacts/longform-implementation/`（不提交）：40 项原生测试、26 项前端测试通过；实际 App 5 单元含对白样例 12.468s，续读前缀 31/31 帧，生成未到上限，整章准备后一次入队并播完。生成暂停 144s 后继续，当前单元记录有效生成 6.444s，暂停等待没有计入 RTF；唤醒锁为 0。准备第一段前以及推理中的系统媒体 pause/play 已通过。实际 Android WAV 为 `android-longform.wav`，其文本/帧数/边缘参数见 `android-sample.json`。缓存 5 单元回放未打开 ONNX；模拟器暂停后的第二次 CPU 采样为 0.0%。关闭 Wi-Fi/移动网络后连续两章播放通过，下一章准备没有提前推进阅读位置；首章结束后的等待再入队也保留完整标题和单元顺序（`waiting-chapters-states.json`）。Android lintDebug 通过，Android 7.0 兼容路径使用 Arrays.asList 而非 List.of。尚未在实体手机量化自然度或耗电。
+
+## 长篇朗读算法调研与原型（2026-10-01，原型阶段记录）
+
+用户最新反馈：单句重音基本可接受，主要问题是句段合起来的节奏，时而两句连得太快、时而在不该停的位置断开；明确要求调研模型长篇阅读算法。不要把 0.3.1 的字数切分调整描述为已解决这个问题。
+
+- 调研时（0.3.1）的服务将片段作为独立的 voice_clone 请求，每片重新构建文本/音频提示及 KV；只有固定预设音色，没有上一片文字和已生成语音。Media3 直接播放独立 WAV，没有统一处理片尾/片首原有静音，也没有保留句号、段落、对白等边界信息。播放器按三个片段预生成，尚未按可播放音频秒数/实测生成速度缓冲。此前模拟器生成慢于播放；需要区分音频本身的停顿与等下一片音频的等待，不能把所有空白都归因于切分。
+- [Nano 官方 ONNX runtime](https://github.com/OpenMOSS/MOSS-TTS-Nano/blob/8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb/onnx_tts_runtime.py) 按实际文本 token 分句、分句过长再拆分，默认预算 75 token；固定参考音频仍逐片独立合成。插入 0.24/0.40 秒静音的分支按空白分隔单词数判断，普通中文通常走 0.40 秒分支，不能视为小说语义停顿模型。官方 Nano Reader 的浏览器实现使用相同方法。
+- **Nano 模型本身支持 continuation，ONNX 包装接口只暴露 voice_clone。** [官方 infer.py](https://github.com/OpenMOSS/MOSS-TTS-Nano/blob/8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb/infer.py) / `moss_tts_nano_runtime.py` 提供 `prompt_text + prompt_audio + target_text`。官方 HF `modeling_moss_tts_nano.py::build_inference_input_ids` 的做法是：用户文本包含前文加目标文本，上一段音频 token 放在 assistant 前缀，slot 使用 `audio_assistant_slot_token_id`。这与把上一段当作 user 里的音色参考不同。解码包含前缀音频以保留 codec 上下文，再移除前缀样本，只播放新增语音。不能给 Nano 随意加入大模型的 `[pause X.Ys]` 指令。
+- `artifacts/longform-research/run_comparison.py` 已将上述 continuation 输入方式移植到**现有** ONNX prefill/decode 图，直接复用上一片生成的音频 token，未使用音频编码器或下载新模型。提示 token 与官方 `prompting.py` helper 核对一致，前缀解码样本长度和最终 WAV 格式/时长检查通过。续接时限定上一片完整文字/音频，在每段开始使用固定音色作为锚点；这是可运行原型，尚未验证真实手机速度、音色长期漂移、漏读/重复和主观自然度。
+- 同一份三段小说式测试文本（含长句和短对白）、小雨/seed 1234、Python ONNX CPU 4 线程：`longform-current.wav` 60.88 秒/7 次合成；`longform-official.wav` 66.96 秒/5 次；`longform-paragraph.wav` 62.96 秒/3 次；`longform-continuation.wav` 66.48 秒/7 次。全部未达到 375 帧上限。参数、全文、边界和限制在 `artifacts/longform-research/comparison.json`。Python 和 Android 随机数不同，样本不是 App 实录。为隔离切分，官方策略样本也每片重置 seed（官方完整请求通常只重置一次）。整段样本略超 75 token 默认预算，仍属于实验；未做 ASR/人工评分，不能声称内容完整或效果已改善。
+- 当前策略样本片间静音的简单 RMS 估计约 50–280ms，两处段落边界约 70/110ms；说明纯 WAV 拼接没有按结构安排停顿。RMS 阈值只能诊断，不应直接用于正式裁剪轻声/清辅音。续接原型也生成了较长边界静音，不能只接入 continuation 就宣布停顿问题解决。
+- 推荐下一步：从原文保留段落、完整句、对白结构；以完整句/语组及实际 token、估计语音时长规划有界合成单元；接入经过验证的 Nano 前文文字/语音续接；识别已有边界静音后按结构校准总停顿；按可播放秒数和生成速度缓冲，提供先生成章节后播放的路径。正文只朗读一次，前缀不重复播放。续接缓存键必须包含前文文字和音频 token 的摘要，不能继续仅按当前文本缓存。跳转/失败/章节边界需要明确上下文重置及音色锚定策略。
+- 耗电约束：朴素前缀重解码会增加计算，原型不能证明省电。后续可验证复用有界 codec 状态，避免每片重复解码前缀；官方 `moss_audio_tokenizer_decode_step.onnx` 本地大小 351,400 字节，共享现有 codec 数据，但当前 App 下载清单不包含这个图，若采用需要固定版本/哈希和兼容验证。不要为长篇阅读让上下文/KV 随整本书无限增长。
+- 研究依据：[ContextSpeech](https://arxiv.org/abs/2307.00782) 在中文有声书场景利用历史文本/语音状态与段落语义建模；[时长感知停顿预测](https://arxiv.org/abs/2302.13652) 说明应同时考虑停顿位置与时长。这些是模型训练方案，不能把未经微调的 BERT 接到 Nano 上就视作拥有该能力。[MOSS-TTS v1.5](https://huggingface.co/OpenMOSS-Team/MOSS-TTS-v1.5) 有前缀续接和显式停顿但为 8B，不适合直接替代当前手机方案；[Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) 有 0.6B/1.7B 版本及长语音研究，公开长篇评估主要为 1.7B，不能据此保证 0.6B Android 实时或电量表现。优先验证现有 Nano 的续接方案，保留用户的 App 内下载、手机离线要求。
+
+本轮没有修改 App 实现、版本号或发布 APK；研究产物在本机 `artifacts/longform-research/`，不提交大音频和模型文件。
 
 ## 运行方法
 

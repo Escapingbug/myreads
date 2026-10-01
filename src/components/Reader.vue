@@ -20,7 +20,7 @@ import type { Book, ChapterContent } from "../types";
 import { storage } from "../services/storage";
 import { state, saveProgress, saveSettings } from "../services/library";
 import ListeningSettings from "./ListeningSettings.vue";
-import { tts, ttsAction, startListening, controlListening, syncListeningProgress } from "../services/tts";
+import { tts, listeningMessage, ttsAction, startListening, controlListening, syncListeningProgress } from "../services/tts";
 const props = defineProps<{ book: Book }>();
 const emit = defineEmits<{ close: []; error: [message: string] }>();
 const savedIndex = props.book.chapters.findIndex(
@@ -294,7 +294,7 @@ onBeforeUnmount(() => {
       </article>
     </div>
     <div v-if="listening" class="reader-listen-bar" :class="{ hidden: !toolbar }">
-      <Headphones :size="16" /><span>{{ { loading: '正在加载声音…', buffering: '正在准备下一段…', paused: '听书已暂停', playing: '正在朗读' }[tts.playback.phase as 'loading' | 'buffering' | 'paused' | 'playing'] }}</span>
+      <Headphones :size="16" /><span>{{ listeningMessage() }}</span>
       <button class="icon-button" :aria-label="tts.playback.phase === 'paused' ? '继续听书' : '暂停听书'" @click="ttsAction(() => controlListening(tts.playback.phase === 'paused' ? 'resume' : 'pause'))"><Play v-if="tts.playback.phase === 'paused'" :size="17" /><Pause v-else :size="17" /></button>
       <button class="icon-button" aria-label="停止听书" @click="ttsAction(() => controlListening('stop'))"><Square :size="15" /></button>
     </div>

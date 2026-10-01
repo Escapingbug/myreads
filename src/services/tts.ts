@@ -12,6 +12,7 @@ export interface ModelStatus {
   file: string;
   error: string;
 }
+export type PreparationMode = "auto" | "stream" | "chapter";
 export interface PlaybackStatus {
   phase: "idle" | "loading" | "buffering" | "playing" | "paused" | "completed" | "error";
   bookId?: string;
@@ -25,6 +26,11 @@ export interface PlaybackStatus {
   positionMs?: number;
   updatedAt?: number;
   error?: string;
+  preparation?: "" | "buffer" | "chapter";
+  preparingChapterTitle?: string;
+  preparedUnits?: number;
+  totalUnits?: number;
+  bufferedSeconds?: number;
 }
 interface TtsPlugin {
   getStatus(): Promise<{ model: ModelStatus; playback: PlaybackStatus }>;
@@ -32,7 +38,7 @@ interface TtsPlugin {
   pauseDownload(): Promise<void>;
   removeModel(): Promise<void>;
   play(options: {
-    bookId: string; title: string; chapter: number; paragraph: number; voice: string; speed: number;
+    bookId: string; title: string; chapter: number; paragraph: number; voice: string; speed: number; mode: PreparationMode;
     chapters: { id: string; title: string; downloaded: boolean }[];
   }): Promise<void>;
   control(options: { action: "pause" | "resume" | "stop" | "speed"; speed?: number }): Promise<void>;
@@ -56,6 +62,7 @@ export const tts = reactive({
   voice: "Junhao",
   speed: 1,
   mirror: false,
+  mode: "auto" as PreparationMode,
   model: {
     id: catalog.id, phase: "missing", downloaded: 0,
     total: catalog.files.reduce((sum, file) => sum + file.size, 0), file: "", error: "",
@@ -92,6 +99,7 @@ export async function initializeTts() {
         if (voices.some((voice) => voice.id === values.voice)) tts.voice = values.voice;
         if (typeof values.speed === "number" && Number.isFinite(values.speed)) tts.speed = Math.max(0.5, Math.min(2, values.speed));
         tts.mirror = values.mirror === true;
+        if (["auto", "stream", "chapter"].includes(values.mode)) tts.mode = values.mode;
       }
       if (tts.supported) {
         listeners.push(await native.addListener("modelState", (status) => { tts.model = status; }));
@@ -115,7 +123,7 @@ export async function refreshTts() {
 }
 export async function saveTtsOptions() {
   const { Preferences } = await import("@capacitor/preferences");
-  await Preferences.set({ key: "tts-options", value: JSON.stringify({ voice: tts.voice, speed: tts.speed, mirror: tts.mirror }) });
+  await Preferences.set({ key: "tts-options", value: JSON.stringify({ voice: tts.voice, speed: tts.speed, mirror: tts.mirror, mode: tts.mode }) });
   if (tts.supported && tts.playback.phase !== "idle") await native.control({ action: "speed", speed: tts.speed });
 }
 export async function ttsAction(action: () => Promise<unknown>) {
@@ -138,7 +146,7 @@ export async function startListening(book: Book, chapter: number, paragraph: num
   progressKey = "";
   await native.play({
     bookId: book.localId, title: book.title, chapter, paragraph,
-    voice: tts.voice, speed: tts.speed,
+    voice: tts.voice, speed: tts.speed, mode: tts.mode,
     chapters: book.chapters.map((item) => ({ id: item.id, title: item.title, downloaded: book.downloaded.includes(item.id) })),
   });
 }
@@ -147,3 +155,17 @@ export async function controlListening(action: "pause" | "resume" | "stop") {
   await refreshTts();
 }
 export function formatModelSize(bytes: number) { return `${(bytes / 1024 / 1024).toFixed(1)} MiB`; }
+
+export function listeningMessage(status: PlaybackStatus = tts.playback): string {
+  if (status.error) return status.error;
+  if (status.phase === "paused") return "听书已暂停";
+  if (status.phase === "playing") return status.chapterTitle || "正在朗读";
+  if (status.preparation === "chapter") {
+    const progress = status.totalUnits ? `（${status.preparedUnits ?? 0}/${status.totalUnits}）` : "";
+    const chapter = status.chapterTitle && status.preparingChapterTitle && status.chapterTitle !== status.preparingChapterTitle ? "下一章" : "本章";
+    return `正在准备${chapter}${progress}，完成后开始播放`;
+  }
+  if (status.phase === "loading") return "正在加载声音…";
+  if (status.phase === "buffering") return "正在准备声音…";
+  return status.chapterTitle || "";
+}

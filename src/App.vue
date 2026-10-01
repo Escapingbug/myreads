@@ -29,7 +29,7 @@ import Reader from "./components/Reader.vue";
 import ListeningSettings from "./components/ListeningSettings.vue";
 import AppUpdate from "./components/AppUpdate.vue";
 import { updates, initializeUpdates, checkUpdates, refreshUpdates } from "./services/updates";
-import { tts, initializeTts, refreshTts, ttsAction, controlListening } from "./services/tts";
+import { tts, listeningMessage, initializeTts, refreshTts, ttsAction, controlListening } from "./services/tts";
 import type {
   Book,
   InstalledSource,
@@ -938,7 +938,7 @@ onBeforeUnmount(() => {
     </main>
     <div v-if="tts.playback.bookId && !['idle', 'completed'].includes(tts.playback.phase) && !readerBook" class="listen-mini-player" role="status">
       <button class="listen-mini-title" @click="state.books.find(book => book.localId === tts.playback.bookId) && openBook(state.books.find(book => book.localId === tts.playback.bookId)!)">
-        <Headphones :size="20" /><span><strong>{{ tts.playback.title }}</strong><small>{{ tts.playback.error || (tts.playback.phase === 'loading' ? '正在加载声音…' : tts.playback.phase === 'buffering' ? '正在准备下一段…' : tts.playback.chapterTitle) }}</small></span>
+        <Headphones :size="20" /><span><strong>{{ tts.playback.title }}</strong><small>{{ listeningMessage() }}</small></span>
       </button>
       <button v-if="tts.playback.phase !== 'error'" class="icon-button" :aria-label="tts.playback.phase === 'paused' ? '继续听书' : '暂停听书'" @click="ttsAction(() => controlListening(tts.playback.phase === 'paused' ? 'resume' : 'pause'))"><Play v-if="tts.playback.phase === 'paused'" :size="19" /><Pause v-else :size="19" /></button>
       <button class="icon-button" aria-label="停止听书" @click="ttsAction(() => controlListening('stop'))"><Square :size="17" /></button>

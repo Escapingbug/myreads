@@ -14,7 +14,7 @@ const labels = { missing: "尚未下载", downloading: "正在下载", verifying
       <div><h2>中文离线听书</h2><span class="muted">MOSS-TTS-Nano · {{ formatModelSize(tts.model.total) }}</span></div>
     </div>
     <p>点击下载声音模型，之后无需联网就能朗读已下载的小说。首次下载建议使用 Wi-Fi。</p>
-    <p class="muted">声音在手机上实时生成，会比播放普通音频更耗电。暂停听书也会暂停生成；已有缓存的片段可直接播放。</p>
+    <p class="muted">声音在手机上生成，会比播放普通音频更耗电。暂停听书也会暂停生成；已有缓存的片段可直接播放。</p>
     <div class="listen-model-status" role="status">
       <CheckCircle2 v-if="tts.model.phase === 'ready'" :size="17" />
       <LoaderCircle v-else-if="downloading" class="spin" :size="17" />
@@ -25,6 +25,7 @@ const labels = { missing: "尚未下载", downloading: "正在下载", verifying
       <progress :value="tts.model.downloaded" :max="tts.model.total" aria-label="模型下载进度"></progress>
       <p class="muted">{{ formatModelSize(tts.model.downloaded) }} / {{ formatModelSize(tts.model.total) }}<span v-if="tts.model.phase === 'verifying'"> · 检查文件完整性</span></p>
     </template>
+    <p v-if="tts.model.downloaded > tts.model.total * 0.9 && tts.model.phase !== 'ready'" class="muted">升级只需补充下载，已有模型会保留。</p>
     <p v-if="tts.model.error" class="download-error" role="alert">{{ tts.model.error }}</p>
     <p v-if="!tts.supported" class="inline-message">在 Android App 中下载并使用本地听书。</p>
     <div v-if="tts.model.phase !== 'ready'" class="listen-download-source">
@@ -55,6 +56,15 @@ const labels = { missing: "尚未下载", downloading: "正在下载", verifying
     </div>
     <div class="setting-row"><label for="listen-speed">播放速度</label><strong>{{ tts.speed.toFixed(2).replace(/0$/, '') }}×</strong></div>
     <input id="listen-speed" v-model.number="tts.speed" type="range" min="0.5" max="2" step="0.25" @change="ttsAction(saveTtsOptions)" />
+    <div class="listen-download-source">
+      <label for="listen-mode">播放准备方式</label>
+      <select id="listen-mode" v-model="tts.mode" @change="ttsAction(saveTtsOptions)">
+        <option value="auto">自动（生成较慢时先准备本章）</option>
+        <option value="stream">边生成边播放</option>
+        <option value="chapter">先准备本章</option>
+      </select>
+    </div>
+    <p class="muted">自动模式会根据手机的生成速度决定准备方式。先准备本章需要等待，但章内播放更连贯；设置在下次开始听书时生效。</p>
   </section>
   <p v-if="tts.error" class="download-error" role="alert">{{ tts.error }}</p>
 </template>

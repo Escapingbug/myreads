@@ -84,7 +84,8 @@ public final class ZijianTtsPlugin extends Plugin {
                 intent.putExtra("access", BookPlaybackService.LAUNCH_TOKEN);
                 intent.putExtra("bookId", id).putExtra("title", call.getString("title", "小说听书"))
                     .putExtra("chapter", chapter).putExtra("paragraph", paragraph).putExtra("voice", voice)
-                    .putExtra("speed", clampSpeed(call.getFloat("speed", 1f)));
+                    .putExtra("speed", clampSpeed(call.getFloat("speed", 1f)))
+                    .putExtra("mode", call.getString("mode", "auto"));
                 ContextCompat.startForegroundService(getContext(), intent); call.resolve();
             } catch (Exception error) { call.reject(error.getMessage(), error); }
         });
