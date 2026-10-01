@@ -1,0 +1,12 @@
+{
+  "manifest": {
+    "id": "io.myreads.demo",
+    "name": "纸间演示",
+    "version": "1.0.0",
+    "apiVersion": 1,
+    "author": "纸间",
+    "domains": [],
+    "description": "三本原创演示短篇，无需网络，可用于验证下载和阅读。"
+  },
+  "script": "const books = [\n  { id: 'quiet', title: '山间来信', author: '纸间编辑部', category: '生活随笔', description: '一封从山间寄来的信，关于清晨、旧书和不赶时间的日子。原创演示内容，共六章，可离线搜索与下载。', status: '完结' },\n  { id: 'night', title: '夜行列车', author: '纸间编辑部', category: '短篇故事', description: '末班列车缓缓驶出站台。窗外的灯火退去，旅人开始讲述自己的故事。原创演示内容，共六章。', status: '完结' },\n  { id: 'garden', title: '小院四季', author: '纸间编辑部', category: '生活随笔', description: '把四季种在一个小院里。记录花开、雨落，以及平凡生活中值得停留的瞬间。原创演示内容，共六章。', status: '完结' }\n];\nconst titles = ['一扇没有关紧的窗', '把时间留给清晨', '旧书里的叶子', '雨停以后', '有风经过的小路', '写给明天的信'];\nconst prose = [\n  '清晨，窗外的树影落在桌面上。风翻过一本没有合上的书，停在昨天读到的那一页。我把杯子放下，听见远处有人推开院门。',\n  '来信的纸张有些粗糙，边角还留着一道折痕。信里没有说什么大事，只写了最近的天气，山下新开的店，以及路边终于开花的树。',\n  '“你什么时候回来？”信的最后这样写着。我想了很久，把日历翻到下个月，又翻了回来。原来有些问题，不需要立刻找到答案。',\n  '午后的光一点点移过窗台。街道上有人骑车经过，车铃响了两声，便消失在转角。屋子重新安静下来，只有钟摆还在缓慢地走。',\n  '我曾经以为，日子需要被许多事情填满，才能称得上充实。后来才明白，能够安静地读完一页书，也是一件很好的事。',\n  '纸上的文字总有自己的速度。读得太快，会错过句子之间的停顿；读得太慢，又会被一个词带到很远的地方。今天，我决定让书自己往下走。',\n  '傍晚的时候，雨终于停了。石阶被洗得很干净，几片叶子贴在墙边。我走到门口，闻到泥土的气味，忽然想给远方的人回一封信。',\n  '信纸铺开以后，反而不知道先写什么。于是我写：“今天过得很普通，但我想把它告诉你。”写到这里，剩下的话便慢慢出现了。'\n];\nconst source = {\n  async search(keyword) { return { items: books.filter(b => !keyword || `${b.title}${b.author}${b.category}`.includes(keyword)) }; },\n  async getBook(ref) { const book = books.find(b => b.id === ref.id); if (!book) throw Error('书籍不存在'); return book; },\n  async getChapters(ref) { return { items: titles.map((title,i) => ({ id: `${ref.id}:${i}`, title: `第${i+1}章 ${title}` })) }; },\n  async getChapter(ref) {\n    await new Promise(resolve => setTimeout(resolve, 280));\n    const index = Number(ref.id.split(':')[1]);\n    return { title: titles[index], paragraphs: Array.from({ length: 24 }, (_, i) => prose[(i + index) % prose.length]) };\n  }\n};\n"
+}
