@@ -25,7 +25,7 @@
 - `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.1 / versionCode 6，原生插件已同步。版本从 `package.json` 读取。
 - `scripts/build-android.mjs`：当前 Mac 使用已安装的 JDK 21 / SDK；若 shell 配置的是旧 JDK，会切换到 Homebrew JDK 21。
 
-发布 APK：`release/zijian-0.3.0.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
+发布 APK：`release/zijian-0.3.1.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
 
 ## 已完成的验证
 
@@ -89,6 +89,9 @@
 - 新增 7 项原生测试：完整长句/分句、英语边界、无丢字的缩短重试、暂停阻塞/继续、取消唤醒且不继续旧任务、线程中断；共 26 项原生、23 项前端通过，普通 APK 构建通过。
 - 模拟器实测：确认旧版系统媒体 PAUSED 状态后仍在合成，10 秒 CPU 样本约 182–210%（100% 为一个核心）；新实现暂停后 0–2%，无新音频生成，合成唤醒锁释放，继续后恢复同一段生成并进入 PLAYING。测试暂停在一次较长 prefill 中，约 2.9 秒后挂起。系统媒体 STOP 已验证取消推理并释放模型与唤醒锁。这里只能说明后台/CPU 行为，**未测量实体手机电量下降百分比**，实时本地合成本身仍需要持续计算。
 - 相同小雨声音/seed 1234/官方 ONNX CPU runtime 的对照：`artifacts/prosody-before.wav` 与 `prosody-after.wav`，原文及参数在 `prosody-comparison.json`。57 字复句以前拆成 30/27 字两次合成，现在整句一次合成，11.52 秒音频；全部样本未触及 375 帧上限。未做主观效果保证。相关 CPU/唤醒锁记录在 `power-*.txt` / `power-verification.json`，不提交 Git。
+- 停止后重新从已生成的段落听书，实测约 0.93 秒进入 PLAYING，记录 `Reusing cached audio`，未生成新音频；随后停止，系统无唤醒锁。记录在 `cache-replay-verification.json`。较长片段首次生成仍需要等待，未保证所有手机能实时连续合成。
+- 已发布 <https://github.com/Escapingbug/myreads/releases/tag/v0.3.1>；标签流水线 <https://github.com/Escapingbug/myreads/actions/runs/36805074813> 成功，49 项测试通过。线上 APK 为 58,801,928 字节，SHA-256 `661f86a58ca084a9e22816a0b36699e8b1de358baebdefac4e67da465ab27de6`，清单与 GitHub 资产一致，证书沿用 0.3.0。`release/` 已同步实际 GitHub APK/清单/校验文件。模型仍不在 APK 中。
+- 实际线上非调试 APK 已覆盖安装到 API35 模拟器，版本 0.3.1 / code6，无 DEBUGGABLE 标记；原书架及第三章阅读记录保留，模型仍显示已下载可离线使用。未重新下载模型。截图在 `release-0.3.1-*.png`。
 
 ## 运行方法
 
@@ -150,4 +153,4 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - 浏览器保存位置依赖浏览器存储。正式 Android 版使用 app 私有 SQLite/持久文件。
 - `npm audit` 当前 3 个 moderate，均为开发期 `@capacitor/cli → xcode → uuid` 链条；不在 Android App 运行时。尚未做依赖降级或强制升级。
 - 当前 `lucide-vue-next` 可编译运行，但包被标记 deprecated；后续可评估迁移，当前未为此扩大改动。
-- 调试 APK 使用开发签名；正式发布需要单独配置发布签名与版本策略。
+- 签名发布配置与版本策略已经接入。当前正式 APK 沿用早期安装包的证书以支持覆盖升级；密钥保存在本机与 GitHub Actions Secrets，不能提交到仓库。
