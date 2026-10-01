@@ -12,7 +12,7 @@
 
 ## 当前完成状态
 
-阅读、听书和更新功能已经实现。0.3.1 已由 GitHub Actions 构建并公开发布，模拟器应用内下载与系统覆盖安装验证通过；尚未在实体手机上测试。长篇朗读算法调研已完成，0.3.2 的上下文续读、停顿校准和时长缓冲已实现，正在完成验证与发布；详见下文。
+阅读、听书和更新功能已经实现。0.3.2 已由 GitHub Actions 构建并公开发布，上下文续读、停顿校准、时长缓冲、整章准备及暂停恢复已验证；公开签名 APK 覆盖安装后书架、第三章阅读记录及模型保留。尚未在实体手机量化长篇听感或耗电。详见下文。
 
 - `src/App.vue`、`src/style.css`：移动端书架、继续阅读、搜索及分页、详情和完整目录预览、下载管理、ZIP/JSON/HTTPS 书源导入确认、启停与卸载、错误/空态、删除确认、原生返回键和应用生命周期。
 - `src/components/Reader.vue`：本地单章上下滚动、上下章、目录跳章、字号、行距、纸色/明亮/夜读、自动保存章节/段落/段内位置。未下载章节禁用。
@@ -22,10 +22,10 @@
 - `src/services/html.ts`：将 HTML 片段包在 body 中，修正 linkedom 对目录展开片段的不同处理，避免丢失中间章节。
 - `src/services/http.ts`、`dev-proxy.ts`：Android 原生 HTTP；开发期本机 HTTPS 代理，校验域名、DNS 公网 IP、固定已校验地址、请求/响应大小及超时。已修复 Node 26 的 DNS `lookup` 全量返回格式。
 - `src/services/packages.ts`、`import.ts`：书源包格式、域名与大小验证；ZIP/JSON 解码，HTTPS 下载包，安装前显示名称、版本和声明域名。
-- `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.1 / versionCode 6，原生插件已同步。版本从 `package.json` 读取。
+- `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.2 / versionCode 7，原生插件已同步。版本从 `package.json` 读取。
 - `scripts/build-android.mjs`：当前 Mac 使用已安装的 JDK 21 / SDK；若 shell 配置的是旧 JDK，会切换到 Homebrew JDK 21。
 
-发布 APK：`release/zijian-0.3.1.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
+发布 APK：`release/zijian-0.3.2.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
 
 ## 已完成的验证
 
@@ -103,6 +103,9 @@
 - 准备完成后释放模型；暂停保留推理状态并释放合成唤醒锁。准备阶段通过 MediaSession 的 ForwardingPlayer 暴露 BUFFERING，使首个 WAV 入队前也能用系统媒体/锁屏暂停。按用户播放意图暂停 producer，不通过内部暂停播放器阻止起播，避免互相等待。
 - 下载目录和模型 id 不变。清单仅增加 decode_step（351,400 bytes，共享已有数据）和 Silero VAD（1,289,603 bytes）；合计新增 1,641,003 bytes，约 1.6 MiB。模型共 719,055,289 bytes，685.7 MiB，依然由用户点击下载，APK 无模型。Silero 固定提交 `1e261b036686cd0017d500ee96acd1c4ba572a9d`，SHA-256 `7ed98ddbad84ccac4cd0aeb3099049280713df825c610a8ed34543318f1b2c49`，MIT 许可证在 assets/tts 中。模拟器“继续下载”后旧 11 文件大小/mtime 全部不变，仅下载两文件并校验。
 - 验证记录在 `artifacts/longform-implementation/`（不提交）：40 项原生测试、26 项前端测试通过；实际 App 5 单元含对白样例 12.468s，续读前缀 31/31 帧，生成未到上限，整章准备后一次入队并播完。生成暂停 144s 后继续，当前单元记录有效生成 6.444s，暂停等待没有计入 RTF；唤醒锁为 0。准备第一段前以及推理中的系统媒体 pause/play 已通过。实际 Android WAV 为 `android-longform.wav`，其文本/帧数/边缘参数见 `android-sample.json`。缓存 5 单元回放未打开 ONNX；模拟器暂停后的第二次 CPU 采样为 0.0%。关闭 Wi-Fi/移动网络后连续两章播放通过，下一章准备没有提前推进阅读位置；首章结束后的等待再入队也保留完整标题和单元顺序（`waiting-chapters-states.json`）。Android lintDebug 通过，Android 7.0 兼容路径使用 Arrays.asList 而非 List.of。尚未在实体手机量化自然度或耗电。
+
+- 已公开发布 <https://github.com/Escapingbug/myreads/releases/tag/v0.3.2>；标签流水线 <https://github.com/Escapingbug/myreads/actions/runs/36848338209> 成功，66 项测试通过。源码标签提交 `a613879`。实际 APK 为 58,820,003 bytes，SHA-256 `7d3144e248b4b2296496ece3d170b01e74452563ce142622fdc186c4f553178f`；线上 assets / update.json / SHA256SUMS 一致，`release/` 已同步实际资产。证书 SHA-256 仍为 `a0abb5c432d5ada068efe059a63c1ec4adef40754a915559e0520538124c1112`，APK 无模型文件、无 DEBUGGABLE 标记。
+- 实际线上 0.3.2 / code7 APK 已覆盖安装至 API35 模拟器。书架仍有山间来信、第三章阅读记录；原生听书位置已还原至测试前的 chapter2 / paragraph18。测试用两个临时章节目录与元数据已清理，实际模型和阅读数据保留；Wi-Fi / 移动数据恢复。准备模式设置截图 `final-options.png`，公开 APK 覆盖后截图 `release-shelf.png` / `release-model.png`。强制“边生成边播放”缓存回放也完整播完，未打开 ONNX。
 
 ## 长篇朗读算法调研与原型（2026-10-01，原型阶段记录）
 
