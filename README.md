@@ -2,7 +2,7 @@
 
 Android 小说阅读器，支持动态书源、搜索、章节下载、离线阅读和本地听书。
 
-[下载最新 APK](https://github.com/escapingbug/myreads/releases/latest) · [版本说明](docs/releases/0.3.0.md)
+[下载最新 APK](https://github.com/escapingbug/myreads/releases/latest) · [版本说明](docs/releases/0.3.1.md)
 
 ## 使用
 
@@ -11,6 +11,7 @@ Android 小说阅读器，支持动态书源、搜索、章节下载、离线阅
 - 在「搜索」选择书源，搜索书名并下载章节；「书架」打开已保存小说离线阅读。
 - 在「书源」导入 ZIP / JSON / HTTPS 书源包。书源包含脚本，请选择可信来源。
 - 「听书」页点击下载 MOSS-TTS-Nano ONNX 模型（约 684 MiB），下载后可离线听书。模型不包含在 APK 中。阅读器的耳机按钮可从当前段落开始，支持六种声音、倍速及后台播放。
+- 长句优先保留完整句子和分句；暂停也会挂起声音生成，已有音频缓存可以直接播放。实时本地合成仍比播放普通音频更耗电。
 - 右上角「设置 → 应用更新」手动检查更新。默认每天在打开应用时自动检查 GitHub 正式 Release；下载 APK 后按 Android 提示允许安装并确认。更新保留书架、阅读进度和模型。
 
 0.2.x 的用户首次需要手动覆盖安装 0.3.0；后续版本可从 App 内更新。无需卸载。

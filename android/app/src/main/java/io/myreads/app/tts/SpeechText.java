@@ -1,11 +1,14 @@
 package io.myreads.app.tts;
 
 import java.text.Normalizer;
+import java.text.BreakIterator;
 import java.util.*;
 import java.util.regex.*;
 
 final class SpeechText {
+    // Unchanged text still produces the same audio: retain those existing cache files.
     static final String AUDIO_REVISION = "punctuation-v2";
+    static final int TARGET_CHARACTERS = 48, MAX_CHARACTERS = 72;
     private static final String DIGITS = "零一二三四五六七八九";
     static String normalize(String input) {
         String text = Normalizer.normalize(input, Normalizer.Form.NFKC)
@@ -86,28 +89,60 @@ final class SpeechText {
         return result.toString();
     }
     static List<String> segments(String input) {
-        String text = normalize(input);
+        return split(normalize(input), TARGET_CHARACTERS, MAX_CHARACTERS);
+    }
+    /** Retry only a capped generation with smaller pieces, keeping the text and ordering. */
+    static List<String> shorterSegments(String segment) {
+        int max = Math.max(1, segment.codePointCount(0, segment.length()) / 2);
+        return split(segment, Math.min(24, max), max);
+    }
+    private static List<String> split(String text, int targetCharacters, int maxCharacters) {
         List<String> result = new ArrayList<>();
         int start = 0;
         while (start < text.length()) {
-            int limit = text.offsetByCodePoints(start, Math.min(48, text.codePointCount(start, text.length())));
-            int end = limit, sentenceEnd = -1;
-            if (limit < text.length()) for (int i = start; i < limit; i++) {
-                if ("。！？!?；;\n".indexOf(text.charAt(i)) >= 0) sentenceEnd = i + 1;
-            }
-            if (sentenceEnd > start) end = sentenceEnd;
-            else if (limit < text.length()) {
-                for (int i = limit - 1; i > start + 12; i--) {
-                    if ("，、,:： ".indexOf(text.charAt(i)) >= 0) { end = i + 1; break; }
-                }
+            int remaining = text.codePointCount(start, text.length());
+            int target = text.offsetByCodePoints(start, Math.min(targetCharacters, remaining));
+            int limit = text.offsetByCodePoints(start, Math.min(maxCharacters, remaining));
+            int end = limit;
+            if (limit < text.length()) {
+                // Allow a sentence to finish beyond the soft target instead of cutting
+                // its subject, predicate or final few words into a new model invocation.
+                end = boundary(text, start, target, limit, true);
+                if (end < 0) end = boundary(text, start, target, limit, false);
+                if (end < 0) end = wordBoundary(text, start, target, limit);
             }
             // Keep combined question/exclamation marks together even at the text budget edge.
             while (end < text.length() && "。！？!?".indexOf(text.charAt(end - 1)) >= 0
                 && "。！？!?".indexOf(text.charAt(end)) >= 0) end++;
-            String part = text.substring(start, end).trim();
+            String part = text.substring(start, end);
             if (part.codePoints().anyMatch(Character::isLetterOrDigit)) result.add(part);
             start = end;
         }
         return result;
+    }
+    private static int boundary(String text, int start, int target, int limit, boolean sentence) {
+        int before = -1;
+        for (int i = start; i < limit; i++) {
+            char c = text.charAt(i);
+            boolean matches = sentence ? "。！？!?；;".indexOf(c) >= 0 || sentencePeriod(text, i)
+                : "，、,:：".indexOf(c) >= 0;
+            if (!matches) continue;
+            int end = i + 1;
+            if (end >= target) return end;
+            if (sentence || text.codePointCount(start, end) >= 12) before = end;
+        }
+        return before;
+    }
+    private static boolean sentencePeriod(String text, int i) {
+        return text.charAt(i) == '.' && (i + 1 == text.length() || Character.isWhitespace(text.charAt(i + 1)));
+    }
+    private static int wordBoundary(String text, int start, int target, int limit) {
+        BreakIterator words = BreakIterator.getWordInstance(Locale.ROOT);
+        words.setText(text);
+        if (words.isBoundary(target)) return target;
+        int before = words.preceding(target);
+        if (before > start && text.codePointCount(start, before) >= 12) return before;
+        int after = words.following(target);
+        return after > start && after <= limit ? after : target;
     }
 }

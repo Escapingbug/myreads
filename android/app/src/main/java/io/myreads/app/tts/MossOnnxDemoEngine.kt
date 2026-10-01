@@ -36,6 +36,10 @@ class MossOnnxDemoEngine(
         setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
         setIntraOpNumThreads(cpuThreads.coerceAtLeast(1))
         setInterOpNumThreads(1)
+        // Four sessions alternate on the same producer. Sleeping workers avoid spinning
+        // while another graph is running, particularly during autoregressive decoding.
+        addConfigEntry("session.intra_op.allow_spinning", "0")
+        addConfigEntry("session.inter_op.allow_spinning", "0")
     }
     private val openedSessions = mutableListOf<OrtSession>()
     private val prefillSession = createSession(File(ttsDir, ttsMeta.files.prefill))
@@ -49,13 +53,17 @@ class MossOnnxDemoEngine(
         voice: String = "Junhao",
         maxFrames: Int = 160,
         seed: Long = 1234L,
+        checkpoint: SynthesisCheckpoint = SynthesisCheckpoint {},
     ): SynthesisResult {
         require(textTokenIds.isNotEmpty()) { "textTokenIds must not be empty" }
         val startedAt = System.currentTimeMillis()
+        checkpoint.awaitReady()
         val inputRows = buildInputRows(textTokenIds, voice)
         val prefillResult = runPrefill(inputRows)
-        val audioTokens = runDecode(prefillResult, maxFrames, seed)
+        val audioTokens = runDecode(prefillResult, maxFrames, seed, checkpoint)
+        checkpoint.awaitReady()
         val pcm = decodeAudioTokens(audioTokens)
+        checkpoint.awaitReady()
         val sampleRate = codecMeta.codecConfig.sampleRate
         writeWavMono(pcm, sampleRate, outputFile)
         val elapsedMs = System.currentTimeMillis() - startedAt
@@ -176,7 +184,7 @@ class MossOnnxDemoEngine(
         }
     }
 
-    private fun runDecode(prefillResult: PrefillResult, maxFrames: Int, seed: Long): List<IntArray> {
+    private fun runDecode(prefillResult: PrefillResult, maxFrames: Int, seed: Long, checkpoint: SynthesisCheckpoint): List<IntArray> {
         val cfg = manifest.ttsConfig
         val audioTokens = ArrayList<IntArray>()
         val rowWidth = cfg.nVq + 1
@@ -192,6 +200,7 @@ class MossOnnxDemoEngine(
         try {
             for (step in 0 until cappedMaxFrames) {
                 if (cancelled || Thread.currentThread().isInterrupted) throw InterruptedException("听书已停止")
+                checkpoint.awaitReady()
                 val frameResult = runLocalFixedSampledFrame(globalHidden, previousTokenSets, random)
                 if (!frameResult.shouldContinue) {
                     break

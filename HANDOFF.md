@@ -22,14 +22,14 @@
 - `src/services/html.ts`：将 HTML 片段包在 body 中，修正 linkedom 对目录展开片段的不同处理，避免丢失中间章节。
 - `src/services/http.ts`、`dev-proxy.ts`：Android 原生 HTTP；开发期本机 HTTPS 代理，校验域名、DNS 公网 IP、固定已校验地址、请求/响应大小及超时。已修复 Node 26 的 DNS `lookup` 全量返回格式。
 - `src/services/packages.ts`、`import.ts`：书源包格式、域名与大小验证；ZIP/JSON 解码，HTTPS 下载包，安装前显示名称、版本和声明域名。
-- `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.0 / versionCode 5，原生插件已同步。版本从 `package.json` 读取。
+- `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.1 / versionCode 6，原生插件已同步。版本从 `package.json` 读取。
 - `scripts/build-android.mjs`：当前 Mac 使用已安装的 JDK 21 / SDK；若 shell 配置的是旧 JDK，会切换到 Homebrew JDK 21。
 
 发布 APK：`release/zijian-0.3.0.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
 
 ## 已完成的验证
 
-- `npm test`：5 个测试文件、23 项测试通过。更新测试覆盖正式 Release 资产/清单、大小/哈希/版本匹配、版本升级判断、自动检查开关与节流、离线缓存、原生下载恢复和显式下载。原有 13 项覆盖听书边界及位置同步、书源包、数据边界、目录、下载队列、离线保存和恢复。
+- `npm test`：5 个测试文件、23 项测试通过；Android 原生单元测试 26 项通过。更新测试覆盖正式 Release 资产/清单、大小/哈希/版本匹配、版本升级判断、自动检查开关与节流、离线缓存、原生下载恢复和显式下载。原有 13 项覆盖听书边界及位置同步、书源包、数据边界、目录、下载队列、离线保存和恢复。
 - `npm run build`：Vue / TypeScript 检查和 Vite 生产构建通过。
 - `npm run android:build`：JDK 21 / API 36 构建成功。
 - 浏览器 390 × 844：演示书源搜索、详情六章目录、整书下载、打开本地正文、切章、滚动；重载后仍有书籍与记录，第二章约 48% 位置恢复正确；ZIP 书源导入确认与更新成功。
@@ -76,6 +76,19 @@
 - 实际发布：<https://github.com/Escapingbug/myreads/releases/tag/v0.3.0>；标签流水线 <https://github.com/Escapingbug/myreads/actions/runs/36799771941> 全部成功。线上 APK 大小 58,801,808 字节（56.1 MiB），SHA-256 `c858e4bb33dfb14227cab4ea3e4a361d6f0677490bd1709fcf0c5f7b0ad5e1ac`。本机 `release/` 已同步这份 GitHub 构建产物，而非本机构建的另一份 ZIP。
 - 模拟器 API35：用含更新功能的临时 0.2.2 / code4 构建加载原有数据，从公开 Release API 获取 0.3.0 / code5；App 原生下载约 37 MiB 后点击暂停，保留部分文件，继续并退到后台完成。安装包与线上 SHA-256 一致，原生包名/版本/签名验证通过，正常进入 Android 安装来源权限页和软件包安装程序，点击系统「更新」后已安装 0.3.0（无 DEBUGGABLE 标志）。重新打开书架保留《山间来信》及第二章阅读记录，听书模型仍显示已下载可离线使用，未重新下载模型。自动检查关闭后重启仍保持关闭，测试后已恢复开启。
 - 升级后再次手动检查显示「已经是最新版本」，不再提示下载同一版本。相关本机截图与发布清单保存在 `artifacts/update-*.png`、`artifacts/github-release/`、`artifacts/published-release.json`、`artifacts/update-verification.json`，不上传 Git。
+
+## 听书断句与耗电调整（0.3.1）
+
+用户确认标点读法与机械感已改善，继续反馈断句、重音偶尔奇怪及耗电较快。
+
+- 原切分以 48 个 Unicode 码点为硬上限，可能拆开一句话或英语单词。现在以 48 字为软目标，优先在完整句子/分句处结束，允许延伸到 72 字，组合 `？！` 最多再保留一个标点；无标点的极长文本仍需要有界切分。使用 `BreakIterator` 避免通常的英语单词被切开。达到 375 帧上限的音频不播放，按更小片段自动重试。
+- 模型、预设声音、官方采样图与随机种子保持原样。重音由模型预测，完整语义上下文不等于保证重音正确；尚未收到用户具体原文例句，不能声称已解决所有模型韵律问题。
+- `SynthesisGate` 为每次听书独立管理暂停/取消。App 和系统媒体暂停都会停止新片段预生成，并在当前推理步骤结束后挂起正在生成的片段，释放合成唤醒锁；继续时保留生成中的 token/KV 状态，停止时取消并释放模型。系统媒体 STOP 也转到服务停止逻辑，避免仅停止播放器后继续合成。
+- ONNX 四个会话关闭 intra/inter-op 线程空转，保留两个计算线程。暂停/缓冲等待使用通知唤醒，不再每 500ms 轮询；播放心跳只在实际播放时调度，进度写盘间隔由每秒改为五秒，状态/段落变化立即保存。
+- 缓存命中时直接播放，首次遇到缺失音频才初始化模型。沿用 `punctuation-v2` 缓存版本，因为采样与规范化未改变；新切分后的不同文本自然产生新缓存键，无需让未改变的片段全部重做，也无需重新下载模型。
+- 新增 7 项原生测试：完整长句/分句、英语边界、无丢字的缩短重试、暂停阻塞/继续、取消唤醒且不继续旧任务、线程中断；共 26 项原生、23 项前端通过，普通 APK 构建通过。
+- 模拟器实测：确认旧版系统媒体 PAUSED 状态后仍在合成，10 秒 CPU 样本约 182–210%（100% 为一个核心）；新实现暂停后 0–2%，无新音频生成，合成唤醒锁释放，继续后恢复同一段生成并进入 PLAYING。测试暂停在一次较长 prefill 中，约 2.9 秒后挂起。系统媒体 STOP 已验证取消推理并释放模型与唤醒锁。这里只能说明后台/CPU 行为，**未测量实体手机电量下降百分比**，实时本地合成本身仍需要持续计算。
+- 相同小雨声音/seed 1234/官方 ONNX CPU runtime 的对照：`artifacts/prosody-before.wav` 与 `prosody-after.wav`，原文及参数在 `prosody-comparison.json`。57 字复句以前拆成 30/27 字两次合成，现在整句一次合成，11.52 秒音频；全部样本未触及 375 帧上限。未做主观效果保证。相关 CPU/唤醒锁记录在 `power-*.txt` / `power-verification.json`，不提交 Git。
 
 ## 运行方法
 
