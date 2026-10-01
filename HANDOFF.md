@@ -12,7 +12,7 @@
 
 ## 当前完成状态
 
-阅读、听书和更新功能已经实现。0.3.2 已由 GitHub Actions 构建并公开发布，上下文续读、停顿校准、时长缓冲、整章准备及暂停恢复已验证；公开签名 APK 覆盖安装后书架、第三章阅读记录及模型保留。尚未在实体手机量化长篇听感或耗电。详见下文。
+阅读、听书和更新功能已经实现。当前 0.3.3 已修正引号对白切分、段落生成模式切换、句首裁剪及随机提前结束，本机测试与 Android 样例回归已通过，待 GitHub Actions 签名发布。0.3.2 的逐句 continuation 经用户长听反馈及本轮对照发现不稳定，当前生产版统一采用官方固定声音参考合成完整语组。尚未在实体手机量化长篇听感或耗电。详见下文。
 
 - `src/App.vue`、`src/style.css`：移动端书架、继续阅读、搜索及分页、详情和完整目录预览、下载管理、ZIP/JSON/HTTPS 书源导入确认、启停与卸载、错误/空态、删除确认、原生返回键和应用生命周期。
 - `src/components/Reader.vue`：本地单章上下滚动、上下章、目录跳章、字号、行距、纸色/明亮/夜读、自动保存章节/段落/段内位置。未下载章节禁用。
@@ -22,10 +22,10 @@
 - `src/services/html.ts`：将 HTML 片段包在 body 中，修正 linkedom 对目录展开片段的不同处理，避免丢失中间章节。
 - `src/services/http.ts`、`dev-proxy.ts`：Android 原生 HTTP；开发期本机 HTTPS 代理，校验域名、DNS 公网 IP、固定已校验地址、请求/响应大小及超时。已修复 Node 26 的 DNS `lookup` 全量返回格式。
 - `src/services/packages.ts`、`import.ts`：书源包格式、域名与大小验证；ZIP/JSON 解码，HTTPS 下载包，安装前显示名称、版本和声明域名。
-- `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.2 / versionCode 7，原生插件已同步。版本从 `package.json` 读取。
+- `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.3 / versionCode 8，原生插件已同步。版本从 `package.json` 读取。
 - `scripts/build-android.mjs`：当前 Mac 使用已安装的 JDK 21 / SDK；若 shell 配置的是旧 JDK，会切换到 Homebrew JDK 21。
 
-发布 APK：`release/zijian-0.3.2.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
+发布 APK：`release/zijian-0.3.3.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
 
 ## 已完成的验证
 
@@ -122,6 +122,21 @@
 - 研究依据：[ContextSpeech](https://arxiv.org/abs/2307.00782) 在中文有声书场景利用历史文本/语音状态与段落语义建模；[时长感知停顿预测](https://arxiv.org/abs/2302.13652) 说明应同时考虑停顿位置与时长。这些是模型训练方案，不能把未经微调的 BERT 接到 Nano 上就视作拥有该能力。[MOSS-TTS v1.5](https://huggingface.co/OpenMOSS-Team/MOSS-TTS-v1.5) 有前缀续接和显式停顿但为 8B，不适合直接替代当前手机方案；[Qwen3-TTS](https://github.com/QwenLM/Qwen3-TTS) 有 0.6B/1.7B 版本及长语音研究，公开长篇评估主要为 1.7B，不能据此保证 0.6B Android 实时或电量表现。优先验证现有 Nano 的续接方案，保留用户的 App 内下载、手机离线要求。
 
 本轮没有修改 App 实现、版本号或发布 APK；研究产物在本机 `artifacts/longform-research/`，不提交大音频和模型文件。
+
+
+## 0.3.3 对白与段落音色修正（2026-10-01）
+
+用户实听反馈：带引号内容断续、段首字不清楚、段落之间声线变化。本轮重新验证 0.3.2 的实现，以下结论取代先前续读原型的生产方案：
+
+- 0.3.2 将引号内各句拆成很短请求，并在每段首句切换为 voice_clone、后续句切换为上一小句音频的 continuation。短前缀和递归生成没有得到长听验证，容易产生衔接和声音不稳定。新的规划器用引号栈保留中英文及嵌套对白；在 75 个实际文本 token / 估计 22 秒上限内合并不足约 6 秒的短句，保留内部标点；长对白优先在句末分开，再选择分句或词边界。异常未闭合引号也保持有界，不丢原文。
+- 更关键的问题是结束标记的随机采样。官方 fixed ONNX 图为 `assistant_random_u <= P(continue)`；Android 每请求重置 seed 1234，同一随机序列曾让两个不同文本都在 58 帧提前结束。改为 `u=0.5`，即选择概率更高的 continue/end；仍保留原音频 token 的随机采样及随机数序列，375 帧封顶 / 缩小重试继续生效。这降低随机早停，不能保证模型永远没有漏词或发音错误。
+- 曾实验固定的完整语音前缀，避免逐句递归漂移；Python 样例可运行，但实际 Android ASR 出现一次“快进来吧”的重复。因此最终生产方案统一使用所选声音的同一份**官方 voice_clone 参考**，不在段首切换模式，不传递上一单元声音，不播放校准句，也无需额外准备或下载声音参考。模型在完整语组内部负责多句节奏；语组之间仍由结构停顿校准。应明确这是移除不稳定的续读路径，而不是声称获得了跨整章语义模型。
+- 编解码对比：同一批旧 Android 音频 token，step 与 full ONNX 解码的平均绝对差约 3.5e-8 至 6.8e-8，未发现 codec 损坏。当前独立生成的语组均从 codec 初始状态解码，保留零状态张量、及时释放结果，不把历史音频状态混入新语组。ONNX 2 CPU 线程、关闭 spinning、暂停检查点和生产结束释放模型继续保留。
+- VAD 只建议首尾边界，裁剪还需确认样本幅值小于 1/32768；有可保留到 16-bit WAV 的轻声或尾音时扩展边界及保护余量。余量由 96ms 增至 160ms，首次输出保留 160ms 启动时间。已添加检测晚于轻声起音、提前结束于轻声尾音的回归，保留区采样逐点一致。不能仅凭这些测试认定用户设备上的首字听感已完全解决。
+- 缓存 revision 为 `narration-fixed-voice-v2`，包含模型、声音、当前文本及边界、前一片尾部时长；不再依赖前一片声音 token。旧生成缓存不会被新算法误用，正文与模型不删除。下载清单仍为原 13 文件 719,055,289 bytes；0.3.2 用户无需补充下载。
+- 本机回归：26 项 Vitest + 43 项 Java JUnit 共 69 项通过；生产前端构建、Android assembleDebug / lintDebug 通过。测试涵盖完整/嵌套/ASCII/未闭合引号、短句内部标点、长对白句末切分、码点/文本顺序、保守裁剪、首次输出、缓存声音及边界、缓冲和暂停。
+- 模型对照与原文保存在 `artifacts/narration-fix/`。六段小说式样例，Java Random 与 Android 音频采样顺序一致；比较旧切分、固定前缀、固定官方参考及确定结束标记。三种声音 Xiaoyu / Junhao / Yuewen 各六段的最终策略样例未触发帧上限；使用 faster-whisper small 本机识别作内容诊断，有同音字、标点和少量词语识别误差，不是人工听感评分，不把 ASR 误字当成已确认的 TTS 错读。ASR 及其模型仅在本机 artifacts 下，不打包或下载到 App。
+- 实际 Android 最终样例 `android-final-dialogue.wav` 为 48kHz / mono / 16-bit，包含标题及三段原文，共 22.614 秒；四单元 23 / 50 / 88 / 99 帧，约 6.8 / 12.7 / 20.3 / 23.9 秒有效生成。ASR 中这组段首内容及完整末句可识别，未再次出现固定前缀实验里的那处短语重复。整章准备后播放完成，准备时不提前推进段落；缓存回放不打开 ONNX，系统媒体暂停 / 继续可用。实体手机、用户具体小说及更长文本仍需要试听验证。
 
 ## 运行方法
 

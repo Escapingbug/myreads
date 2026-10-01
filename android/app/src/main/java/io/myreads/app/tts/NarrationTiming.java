@@ -1,8 +1,8 @@
 package io.myreads.app.tts;
 
-/** Alter only detected edge silence. Spoken samples, including internal pauses, remain intact. */
+/** VAD suggests a boundary; only confirmed near-zero samples may actually be removed. */
 final class NarrationTiming {
-    static final int RATE = 48000, GUARD = RATE * 96 / 1000;
+    static final int RATE = 48000, GUARD = RATE * 160 / 1000;
     static final class Rendered {
         final float[] samples;
         final int leading, trailing, retainedTail;
@@ -14,15 +14,24 @@ final class NarrationTiming {
                            int previousRawTail, int previousRetainedTail) {
         if (firstSpeech < 0 || lastSpeech <= firstSpeech || lastSpeech > raw.length) {
             // An uncertain detector is not permission to discard a quiet utterance.
-            int gap = previousBoundary == null ? 0 : pause(previousBoundary, previousRawTail) - previousRetainedTail;
+            int gap = previousBoundary == null ? RATE * 160 / 1000 : pause(previousBoundary, previousRawTail) - previousRetainedTail;
             float[] preserved = new float[raw.length + Math.max(0, gap)];
             System.arraycopy(raw, 0, preserved, Math.max(0, gap), raw.length);
             return new Rendered(preserved, 0, 0, 0);
         }
-        int rawTail = raw.length - lastSpeech;
         int start = Math.max(0, firstSpeech - GUARD), end = Math.min(raw.length, lastSpeech + GUARD);
+        // Quiet consonants and breathy onsets can precede VAD by hundreds of ms.
+        // Protect every sample that could survive 16-bit WAV quantization, even
+        // when the detector confidently labels that area as silence.
+        for (int i = 0; i < start; i++) if (Math.abs(raw[i]) >= 1f / 32768) {
+            firstSpeech = i; start = Math.max(0, i - GUARD); break;
+        }
+        for (int i = raw.length - 1; i >= end; i--) if (Math.abs(raw[i]) >= 1f / 32768) {
+            lastSpeech = i + 1; end = Math.min(raw.length, lastSpeech + GUARD); break;
+        }
+        int rawTail = raw.length - lastSpeech;
         int keptLead = firstSpeech - start, keptTail = end - lastSpeech;
-        int target = previousBoundary == null ? Math.min(firstSpeech, RATE * 160 / 1000)
+        int target = previousBoundary == null ? RATE * 160 / 1000
             : pause(previousBoundary, previousRawTail + firstSpeech);
         int pad = Math.max(0, target - previousRetainedTail - keptLead);
         float[] rendered = new float[pad + end - start];

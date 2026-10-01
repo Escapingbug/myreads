@@ -150,9 +150,8 @@ public final class BookPlaybackService extends MediaSessionService {
     private static final class Planned {
         final NarrationPlanner.Unit unit;
         final int paragraph;
-        final boolean continuation;
-        Planned(NarrationPlanner.Unit unit, int paragraph, boolean continuation) {
-            this.unit = unit; this.paragraph = paragraph; this.continuation = continuation;
+        Planned(NarrationPlanner.Unit unit, int paragraph) {
+            this.unit = unit; this.paragraph = paragraph;
         }
     }
     private static final class Ready {
@@ -187,7 +186,7 @@ public final class BookPlaybackService extends MediaSessionService {
                 ArrayDeque<Planned> units = new ArrayDeque<>();
                 if (first == 0) {
                     for (NarrationPlanner.Unit unit : NarrationPlanner.paragraph(title + "。", counter))
-                        units.add(new Planned(unit.ending(NarrationPlanner.Boundary.TITLE), 0, false));
+                        units.add(new Planned(unit.ending(NarrationPlanner.Boundary.TITLE), 0));
                 }
                 for (int p = first; p < paragraphs.length(); p++) {
                     gate.awaitReady(() -> {}, () -> {}); check(token);
@@ -195,7 +194,7 @@ public final class BookPlaybackService extends MediaSessionService {
                     for (int i = 0; i < prose.size(); i++) {
                         NarrationPlanner.Unit unit = prose.get(i);
                         if (p == paragraphs.length() - 1 && i == prose.size() - 1) unit = unit.ending(NarrationPlanner.Boundary.CHAPTER);
-                        units.add(new Planned(unit, p, i > 0));
+                        units.add(new Planned(unit, p));
                     }
                 }
                 if (units.isEmpty()) throw new IOException("这一章没有可朗读的内容");
@@ -210,12 +209,12 @@ public final class BookPlaybackService extends MediaSessionService {
                     else { gate.awaitReady(() -> {}, () -> {}); check(token); }
                     Planned planned = units.removeFirst();
                     NarrationCache.Clip clip;
-                    try { clip = audio(token, gate, models, selectedVoice, planned.unit, previous, planned.continuation); }
+                    try { clip = audio(token, gate, models, selectedVoice, planned.unit, previous); }
                     catch (FrameLimitException limit) {
                         List<NarrationPlanner.Unit> smaller = NarrationPlanner.retry(planned.unit, counter);
                         if (smaller.size() < 2) throw new IOException("这一句未能完整生成，请换一个声音后重试");
                         for (int i = smaller.size() - 1; i >= 0; i--)
-                            units.addFirst(new Planned(smaller.get(i), planned.paragraph, i > 0 || planned.continuation));
+                            units.addFirst(new Planned(smaller.get(i), planned.paragraph));
                         count += smaller.size() - 1;
                         android.util.Log.i("ZijianTts", "Retrying capped sentence at a smaller semantic boundary");
                         continue;
@@ -297,15 +296,14 @@ public final class BookPlaybackService extends MediaSessionService {
         finally { if (synthesisWake.isHeld()) synthesisWake.release(); }
     }
     private NarrationCache.Clip audio(int token, SynthesisGate gate, ModelRepository models, String selectedVoice,
-                                     NarrationPlanner.Unit unit, NarrationCache.Clip previous, boolean continuation) throws Exception {
+                                     NarrationPlanner.Unit unit, NarrationCache.Clip previous) throws Exception {
         File directory = new File(getCacheDir(), "tts"); directory.mkdirs();
-        boolean continuing = continuation && previous != null;
-        String name = NarrationCache.key(models.id, selectedVoice, unit, previous, continuing);
+        String name = NarrationCache.key(models.id, selectedVoice, unit, previous);
         File destination = new File(directory, name + ".wav"), sidecar = new File(directory, name + ".codes");
         NarrationCache.Clip cached = NarrationCache.read(destination, sidecar, unit);
         if (cached != null) {
             destination.setLastModified(System.currentTimeMillis());
-            android.util.Log.i("ZijianTts", "Reusing cached narration with audio context");
+            android.util.Log.i("ZijianTts", "Reusing cached narration");
             return cached;
         }
         if (directory.getUsableSpace() < 64L * 1024 * 1024) throw new IOException("存储空间不足，请先释放至少 64 MiB 空间");
@@ -324,8 +322,7 @@ public final class BookPlaybackService extends MediaSessionService {
                     android.util.Log.i("ZijianTts", "Synthesis resumed");
                 });
                 check(token);
-            }, continuing ? engine.continuationPrompt(previous.unit.text, unit.text, tokenizer) : null,
-                continuing ? previous.codes : null, previous == null ? null : previous.unit.ending,
+            }, previous == null ? null : previous.unit.ending,
                 previous == null ? 0 : previous.rawTrailing, previous == null ? 0 : previous.retainedTail);
             check(token);
             if (result.getGeneratedFrames() >= 375) throw new FrameLimitException();
@@ -333,9 +330,9 @@ public final class BookPlaybackService extends MediaSessionService {
             clip = new NarrationCache.Clip(destination, unit, result.getAudioCodes(), result.getDurationMs(), result.getElapsedMs(),
                 result.getRawLeading(), result.getRawTrailing(), result.getRetainedTail());
             NarrationCache.write(partialCodes, clip);
-            if (!partialCodes.renameTo(sidecar)) throw new IOException("语音上下文保存失败");
-            android.util.Log.i("ZijianTts", "Generated " + clip.durationMs + "ms audio in " + clip.activeMs + "ms, prefixFrames="
-                + (continuing ? previous.codes.size() : 0) + ", ending=" + unit.ending + ", edgeMs="
+            if (!partialCodes.renameTo(sidecar)) throw new IOException("语音缓存保存失败");
+            android.util.Log.i("ZijianTts", "Generated " + clip.durationMs + "ms audio in " + clip.activeMs + "ms, voice="
+                + selectedVoice + ", ending=" + unit.ending + ", edgeMs="
                 + clip.rawLeading / 48 + "/" + clip.rawTrailing / 48);
         } finally {
             partial.delete(); partialCodes.delete();

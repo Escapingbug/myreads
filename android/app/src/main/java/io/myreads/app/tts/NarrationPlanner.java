@@ -17,20 +17,35 @@ public final class NarrationPlanner {
     }
     static final int MAX_TOKENS = 75;
     static final double MAX_SECONDS = 22;
+    static final double MIN_SECONDS = 6;
     private static final Pattern ATTRIBUTION = Pattern.compile(
         "^\\s*(?:他|她|我|老人|男人|女人|少年|女孩|男孩)[^。！？!?“「『\\n]{0,12}(?:说|问|答|道|喊|叫|回应|回答|低语)[。！？!?]");
 
     static List<Unit> paragraph(String original, TokenCounter tokens) {
         List<Unit> result = new ArrayList<>();
         int start = 0;
+        Deque<Character> quotes = new ArrayDeque<>();
         for (int i = 0; i < original.length(); i++) {
             char c = original.charAt(i);
+            if (c == '\'' && i > 0 && i + 1 < original.length()
+                && Character.UnicodeScript.of(original.charAt(i - 1)) == Character.UnicodeScript.LATIN
+                && Character.UnicodeScript.of(original.charAt(i + 1)) == Character.UnicodeScript.LATIN) continue;
+            if (!quotes.isEmpty() && c == quotes.peek()) { quotes.pop(); continue; }
+            int opening = "“「『‘\"'".indexOf(c);
+            if (opening >= 0) { quotes.push("”」』’\"'".charAt(opening)); continue; }
             boolean end = "。！？!?；;…".indexOf(c) >= 0 || sentencePeriod(original, i) || c == '.' && i + 1 < original.length() && original.charAt(i + 1) == '.';
             if (!end) continue;
+            // Finish a quoted turn, including nested quotation, before creating a request.
+            if (!quotes.isEmpty()) {
+                int closing = i + 1;
+                while (closing < original.length() && "。！？!?….".indexOf(original.charAt(closing)) >= 0) closing++;
+                if (quotes.size() != 1 || closing >= original.length() || original.charAt(closing) != quotes.peek()) continue;
+            }
             int after = i + 1;
-            while (after < original.length() && "。！？!?….”’\"』」".indexOf(original.charAt(after)) >= 0) after++;
+            while (after < original.length() && "。！？!?….”’\"'』」".indexOf(original.charAt(after)) >= 0) after++;
+            quotes.clear();
             Boundary ending = boundary(original.substring(i, after));
-            if (original.substring(i, after).matches("(?s).*[”\"』」].*")) {
+            if (original.substring(i, after).matches("(?s).*[”’\"'』」].*")) {
                 Matcher attribution = ATTRIBUTION.matcher(original.substring(after));
                 if (attribution.find()) {
                     after += attribution.end();
@@ -41,13 +56,30 @@ public final class NarrationPlanner {
             start = after; i = after - 1;
         }
         if (start < original.length()) add(result, original.substring(start), Boundary.SENTENCE, tokens);
+        // Tiny standalone requests are a weak acoustic context. Keep their punctuation
+        // inside a bounded phrase so the model itself handles the internal rhythm.
+        List<Unit> grouped = new ArrayList<>();
+        for (Unit unit : result) {
+            if (!grouped.isEmpty()) {
+                Unit previous = grouped.get(grouped.size() - 1);
+                String together = previous.text + (endsInLatin(previous.text) ? " " : "") + unit.text;
+                if (seconds(previous.text) < MIN_SECONDS && previous.ending != Boundary.CONTINUATION
+                    && previous.ending != Boundary.CLAUSE && fits(together, tokens, MAX_TOKENS, MAX_SECONDS)) {
+                    grouped.set(grouped.size() - 1, new Unit(together, unit.ending, previous.dialogue || unit.dialogue));
+                    continue;
+                }
+            }
+            grouped.add(unit);
+        }
+        result = grouped;
         if (!result.isEmpty()) result.set(result.size() - 1, result.get(result.size() - 1).ending(Boundary.PARAGRAPH));
         return result;
     }
+    private static boolean endsInLatin(String text) { return text.matches("(?s).*[A-Za-z][.!?]*$"); }
     private static void add(List<Unit> output, String raw, Boundary ending, TokenCounter tokens) {
         String text = SpeechText.normalize(raw);
         if (!text.codePoints().anyMatch(Character::isLetterOrDigit)) return;
-        boolean dialogue = raw.matches("(?s).*[“”「」『』\"].*");
+        boolean dialogue = raw.matches("(?s).*[“”‘’「」『』\"'].*");
         split(output, text, ending, dialogue, tokens, MAX_TOKENS, MAX_SECONDS);
     }
     private static void split(List<Unit> output, String text, Boundary ending, boolean dialogue,
@@ -62,8 +94,12 @@ public final class NarrationPlanner {
                 else high = mid - 1;
             }
             int limit = text.offsetByCodePoints(0, count), cut = -1;
-            for (int i = 0; i < limit; i++) if ("，,、：:".indexOf(text.charAt(i)) >= 0) cut = i + 1;
-            Boundary splitEnding = Boundary.CLAUSE;
+            Boundary splitEnding = null;
+            for (int i = 0; i < limit; i++) if ("。！？!?；;".indexOf(text.charAt(i)) >= 0 || sentencePeriod(text, i)) {
+                cut = i + 1; splitEnding = boundary(text.substring(i, i + 1));
+            }
+            if (cut <= 0) for (int i = 0; i < limit; i++) if ("，,、：:".indexOf(text.charAt(i)) >= 0) cut = i + 1;
+            if (splitEnding == null) splitEnding = Boundary.CLAUSE;
             if (cut <= 0) {
                 BreakIterator words = BreakIterator.getWordInstance(Locale.ROOT); words.setText(text);
                 cut = words.isBoundary(limit) ? limit : words.preceding(limit);

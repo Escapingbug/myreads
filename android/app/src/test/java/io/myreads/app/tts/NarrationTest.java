@@ -16,22 +16,26 @@ public class NarrationTest {
         StringBuilder text = new StringBuilder(); for (NarrationPlanner.Unit unit : units) text.append(unit.text); return text.toString();
     }
     @Test public void keepsCompleteSentencesDialogueAndParagraphStructure() {
-        List<NarrationPlanner.Unit> units = NarrationPlanner.paragraph("他抬起头。“你是谁？”门外没有回答……风又吹了起来。", counter);
+        List<NarrationPlanner.Unit> units = NarrationPlanner.paragraph(
+            "他抬起头，窗外的雨声越来越近，可是他仍然一动不动地望着那扇紧闭的门。"
+            + "“你是谁？你为什么会来到这里？难道你没有看到门上的告示吗？”"
+            + "门外一直没有人回答，他只是看着远处那一盏明灭不定的灯火，久久没有开口……风又吹了起来。", counter);
         assertEquals(4, units.size());
         assertEquals(SENTENCE, units.get(0).ending); assertEquals(QUESTION, units.get(1).ending);
         assertTrue(units.get(1).dialogue); assertEquals(ELLIPSIS, units.get(2).ending);
         assertEquals(PARAGRAPH, units.get(3).ending);
-        assertEquals("他抬起头。", units.get(0).text);
-        assertEquals("你是谁？", units.get(1).text);
+        assertTrue(units.get(0).text.startsWith("他抬起头，"));
+        assertEquals("你是谁？你为什么会来到这里？难道你没有看到门上的告示吗？", units.get(1).text);
     }
-    @Test public void doesNotGreedilyCombineSeparateShortSentences() {
+    @Test public void groupsTinySentencesWithoutRemovingTheirInternalPunctuation() {
         List<NarrationPlanner.Unit> units = NarrationPlanner.paragraph("好。走吧。天亮了。", counter);
-        assertEquals(3, units.size()); assertEquals("好。", units.get(0).text);
+        assertEquals(1, units.size()); assertEquals("好。走吧。天亮了。", units.get(0).text);
+        assertEquals(PARAGRAPH, units.get(0).ending);
     }
     @Test public void keepsShortDialogueAttributionWithTheQuotedUtterance() {
         List<NarrationPlanner.Unit> units = NarrationPlanner.paragraph("“你来了？”她轻声问。屋里又安静下来。", counter);
-        assertEquals(2, units.size()); assertEquals("你来了？她轻声问。", units.get(0).text);
-        assertTrue(units.get(0).dialogue); assertEquals(SENTENCE, units.get(0).ending);
+        assertEquals(1, units.size()); assertEquals("你来了？她轻声问。屋里又安静下来。", units.get(0).text);
+        assertTrue(units.get(0).dialogue); assertEquals(PARAGRAPH, units.get(0).ending);
     }
     @Test public void longSentencePrefersClauseBoundariesAndPreservesTextOrder() {
         String text = "窗外的风声".repeat(9) + "，" + "旅人收起手中的信件".repeat(10) + "，他终于站了起来。";
@@ -55,9 +59,12 @@ public class NarrationTest {
         assertEquals(PARAGRAPH, split.get(split.size() - 1).ending);
     }
     @Test public void decimalPointIsNotASentenceBreakAndAsciiEllipsisIsRecognized() {
-        List<NarrationPlanner.Unit> units = NarrationPlanner.paragraph("温度是3.5度。Wait... Then go.", counter);
-        assertEquals(3, units.size()); assertTrue(units.get(0).text.contains("三点五"));
-        assertEquals(ELLIPSIS, units.get(1).ending);
+        String input = "温度是3.5度。Wait... Then go.";
+        List<NarrationPlanner.Unit> units = NarrationPlanner.paragraph(input, counter);
+        assertTrue(units.get(0).text.contains("三点五"));
+        assertTrue(joined(units).contains("Wait. Then go."));
+        List<NarrationPlanner.Unit> ellipsis = NarrationPlanner.paragraph("这一路上的风雨".repeat(5) + "...后来他终于走到了门口。", counter);
+        assertEquals(ELLIPSIS, ellipsis.get(0).ending);
     }
     @Test public void trimsOnlyOuterSilenceAndKeepsInternalSpeechSamplesExactly() {
         float[] audio = new float[48000];
@@ -79,7 +86,42 @@ public class NarrationTest {
     }
     @Test public void unknownSpeechEdgesPreserveEvenQuietAudio() {
         float[] quiet = new float[12000]; Arrays.fill(quiet, 0.0001f);
-        assertArrayEquals(quiet, NarrationTiming.render(quiet, -1, -1, null, 0, 0).samples, 0);
+        float[] output = NarrationTiming.render(quiet, -1, -1, null, 0, 0).samples;
+        assertEquals(quiet.length + 160 * 48, output.length);
+        assertArrayEquals(quiet, Arrays.copyOfRange(output, 160 * 48, output.length), 0);
+    }
+    @Test public void lateVadDoesNotEraseQuietInitialOrFinalPhonemes() {
+        float[] audio = new float[48000];
+        Arrays.fill(audio, 4800, 12000, 0.00005f);
+        Arrays.fill(audio, 24000, 32000, 0.5f);
+        Arrays.fill(audio, 43200, 46080, 0.00005f);
+        NarrationTiming.Rendered rendered = NarrationTiming.render(audio, 24000, 32000, PARAGRAPH, 4800, 2400);
+        int first = 0; while (rendered.samples[first] == 0) first++;
+        assertEquals(650 * 48, first + 2400);
+        for (int i = 4800; i < 46080; i++) assertEquals(audio[i], rendered.samples[first + i - 4800], 0);
+    }
+    @Test public void initialUtteranceHasTimeForTheAudioOutputToStart() {
+        float[] audio = new float[24000]; Arrays.fill(audio, 0, 19200, 0.5f);
+        NarrationTiming.Rendered rendered = NarrationTiming.render(audio, 0, 19200, null, 0, 0);
+        assertEquals(0.5f, rendered.samples[160 * 48], 0);
+        for (int i = 0; i < 160 * 48; i++) assertEquals(0, rendered.samples[i], 0);
+    }
+    @Test public void nestedAndAsciiQuotesStayTogetherAndUnclosedQuotesStayBounded() {
+        for (String text : List.of("“你来了？他说‘别急。’我们再等等。外面冷不冷？”", "\"你来了？别急。我们再等等。外面冷不冷？\"", "'你来了？别急。我们再等等。外面冷不冷？'")) {
+            List<NarrationPlanner.Unit> units = NarrationPlanner.paragraph(text, counter);
+            assertEquals(1, units.size()); assertEquals(SpeechText.normalize(text), joined(units));
+            assertTrue(units.get(0).dialogue);
+        }
+        String text = "“" + "风渐渐停了下来。".repeat(40);
+        List<NarrationPlanner.Unit> units = NarrationPlanner.paragraph(text, counter);
+        assertEquals(SpeechText.normalize(text), joined(units));
+        for (NarrationPlanner.Unit unit : units) assertTrue(counter.count(unit.text) <= 75);
+    }
+    @Test public void quotedLongTurnsSplitAtSentencesBeforeClauses() {
+        String text = "“" + "这一路上的风雨".repeat(5) + "。" + "你到底想说什么，".repeat(8) + "”";
+        List<NarrationPlanner.Unit> units = NarrationPlanner.paragraph(text, counter);
+        assertEquals(SpeechText.normalize(text), joined(units));
+        assertEquals(SENTENCE, units.get(0).ending); assertTrue(units.get(0).text.endsWith("。"));
     }
     @Test public void bufferingUsesPlayableDurationAndGenerationSpeedRatherThanNumberOfClips() {
         NarrationBuffer buffer = new NarrationBuffer("auto", 0);
@@ -97,7 +139,7 @@ public class NarrationTest {
         int[] codes = new int[16]; Arrays.fill(codes, 123);
         return new NarrationCache.Clip(wav, new NarrationPlanner.Unit("来吧。", SENTENCE, false), List.of(codes), 1000, 3000, 100, 200, 100);
     }
-    @Test public void audioContextSurvivesCacheHitsAndMalformedSidecarsAreRejected() throws Exception {
+    @Test public void generatedCodesAndTimingSurviveCacheHitsAndMalformedSidecarsAreRejected() throws Exception {
         NarrationCache.Clip clip = clip(); File data = folder.newFile(); NarrationCache.write(data, clip);
         NarrationCache.Clip restored = NarrationCache.read(clip.file, data, clip.unit);
         assertNotNull(restored); assertArrayEquals(clip.codes.get(0), restored.codes.get(0));
@@ -107,20 +149,14 @@ public class NarrationTest {
         NarrationCache.write(data, clip); Files.write(clip.file.toPath(), new byte[101]);
         assertNull(NarrationCache.read(clip.file, data, clip.unit));
     }
-    @Test public void cacheKeyChangesWhenPriorAudioOrStructuralContextChanges() throws Exception {
+    @Test public void cacheKeyIncludesVoiceAndTimingWithoutInheritingPreviousGeneratedSpeech() throws Exception {
         NarrationCache.Clip previous = clip(); NarrationPlanner.Unit next = new NarrationPlanner.Unit("进来。", PARAGRAPH, false);
-        String key = NarrationCache.key("model", "voice", next, previous, true);
-        assertEquals(key, NarrationCache.key("model", "voice", next, previous, true));
-        assertNotEquals(key, NarrationCache.key("model", "voice", next, previous, false));
-        assertNotEquals(key, NarrationCache.key("model", "voice", next.ending(SENTENCE), previous, true));
+        String key = NarrationCache.key("model", "voice", next, previous);
+        assertEquals(key, NarrationCache.key("model", "voice", next, previous));
+        assertNotEquals(key, NarrationCache.key("model", "voice", next, null));
+        assertNotEquals(key, NarrationCache.key("model", "other-voice", next, previous));
+        assertNotEquals(key, NarrationCache.key("model", "voice", next.ending(SENTENCE), previous));
         previous.codes.get(0)[0]++;
-        assertNotEquals(key, NarrationCache.key("model", "voice", next, previous, true));
-    }
-    @Test public void continuationPlacesPreviousTranscriptInUserAndSpeechAfterAssistantStart() {
-        List<String> encoded = new ArrayList<>();
-        int[] result = NarrationPrompt.continuation(value -> { encoded.add(value); return new int[]{100 + encoded.size()}; }, "前句。", "后句。", 4, 5, 7);
-        assertEquals("前句。后句。", encoded.get(4));
-        assertEquals("None", encoded.get(2)); assertEquals("assistant\n", encoded.get(7));
-        assertEquals(4, result[0]); assertEquals(5, result[7]); assertEquals(4, result[9]); assertEquals(7, result[result.length - 1]);
+        assertEquals(key, NarrationCache.key("model", "voice", next, previous));
     }
 }

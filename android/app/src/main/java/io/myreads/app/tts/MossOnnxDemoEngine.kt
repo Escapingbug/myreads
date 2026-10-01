@@ -49,13 +49,6 @@ class MossOnnxDemoEngine(
     private val codec = CodecStreamDecoder(env, codecStepSession, readJson(codecMetaPath))
     private val vadSession = createSession(File(modelRoot, "Silero-VAD/silero_vad_16k_op15.onnx"))
     private val speechEdges = SpeechEdges(env, vadSession)
-    private var lastCodes: List<IntArray>? = null
-
-    fun continuationPrompt(previous: String, target: String, tokenizer: NativeTokenizer): IntArray =
-        NarrationPrompt.continuation(tokenizer::tokenize, previous, target,
-            manifest.ttsConfig.imStartTokenId, manifest.ttsConfig.imEndTokenId, manifest.ttsConfig.audioStartTokenId)
-
-    fun resetNarration() { codec.reset(); lastCodes = null }
 
     fun synthesize(
         textTokenIds: IntArray,
@@ -64,8 +57,6 @@ class MossOnnxDemoEngine(
         maxFrames: Int = 160,
         seed: Long = 1234L,
         checkpoint: SynthesisCheckpoint = SynthesisCheckpoint {},
-        continuationPromptIds: IntArray? = null,
-        prefixCodes: List<IntArray>? = null,
         previousBoundary: NarrationPlanner.Boundary? = null,
         previousRawTail: Int = 0,
         previousRetainedTail: Int = 0,
@@ -78,24 +69,15 @@ class MossOnnxDemoEngine(
             val before = System.nanoTime(); checkpoint.awaitReady(); waitedNanos += System.nanoTime() - before
         }
         activeCheckpoint.awaitReady()
-        val continuing = continuationPromptIds != null && !prefixCodes.isNullOrEmpty()
-        val inputRows = if (continuing) {
-            val cfg = manifest.ttsConfig
-            val rows = buildTextRows(continuationPromptIds!!, cfg, cfg.nVq + 1) +
-                buildAudioRows(prefixCodes!!, cfg, cfg.nVq + 1, cfg.audioAssistantSlotTokenId)
-            InputRows(rows.toTypedArray(), IntArray(rows.size) { 1 })
-        } else buildInputRows(textTokenIds, voice)
+        // Use the same official voice reference for every complete phrase. Prior
+        // generated audio is not a reliable speaker/prosody prompt in this model.
+        val inputRows = buildInputRows(textTokenIds, voice)
         val prefillResult = runPrefill(inputRows)
         val audioTokens = runDecode(prefillResult, maxFrames, seed, activeCheckpoint)
         if (audioTokens.size >= maxFrames || audioTokens.isEmpty())
             return SynthesisResult(outputFile, audioTokens.size, 48000, 0, (System.nanoTime() - startedAt - waitedNanos) / 1000000, audioTokens)
         activeCheckpoint.awaitReady()
-        if (!continuing || lastCodes !== prefixCodes) {
-            codec.reset()
-            if (continuing) { codec.decode(prefixCodes!!, false); activeCheckpoint.awaitReady() }
-        }
-        val raw = codec.decode(audioTokens)
-        lastCodes = audioTokens
+        val raw = codec.decode(audioTokens, activeCheckpoint)
         activeCheckpoint.awaitReady()
         val bounds = speechEdges.detect(raw, activeCheckpoint)
         val rendered = NarrationTiming.render(raw, bounds[0], bounds[1], previousBoundary, previousRawTail, previousRetainedTail)
@@ -302,7 +284,11 @@ class MossOnnxDemoEngine(
                 }
             }
         }
-        val assistantRandom = floatArrayOf(random.nextDouble().coerceIn(1e-6, 1.0 - 1e-6).toFloat())
+        // The exported graph continues iff u <= P(continue). u=0.5 chooses
+        // the more likely stop/continue token while audio sampling stays varied.
+        // Sampling EOS with u close to 1 cut complete sentences off at frame 58.
+        random.nextDouble() // Preserve the established sequence of audio-code draws.
+        val assistantRandom = floatArrayOf(0.5f)
         val audioRandom = FloatArray(cfg.nVq) {
             random.nextDouble().coerceIn(1e-6, 1.0 - 1e-6).toFloat()
         }

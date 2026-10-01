@@ -5,9 +5,9 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.*;
 
-/** Persist the generated codes as well as WAV, so cached narration remains usable as context. */
+/** Cache WAV with its structural timing and generated-code provenance. */
 final class NarrationCache {
-    static final String REVISION = "narration-context-v1";
+    static final String REVISION = "narration-fixed-voice-v2";
     static final class Clip {
         final File file;
         final NarrationPlanner.Unit unit;
@@ -20,12 +20,11 @@ final class NarrationCache {
             this.activeMs = activeMs; this.rawLeading = rawLeading; this.rawTrailing = rawTrailing; this.retainedTail = retainedTail;
         }
     }
-    static String key(String model, String voice, NarrationPlanner.Unit unit, Clip previous, boolean continuation) throws Exception {
+    static String key(String model, String voice, NarrationPlanner.Unit unit, Clip previous) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        digest.update((model + ":" + REVISION + ":" + voice + ":" + continuation + ":" + unit.ending + ":" + unit.text + "\0").getBytes(StandardCharsets.UTF_8));
+        digest.update((model + ":" + REVISION + ":" + voice + ":" + unit.ending + ":" + unit.text + "\0").getBytes(StandardCharsets.UTF_8));
         if (previous != null) {
-            digest.update((previous.unit.text + "\0" + previous.unit.ending + ":" + previous.rawTrailing + ":" + previous.retainedTail).getBytes(StandardCharsets.UTF_8));
-            for (int[] row : previous.codes) for (int code : row) { digest.update((byte) (code >>> 8)); digest.update((byte) code); }
+            digest.update((previous.unit.ending + ":" + previous.rawTrailing + ":" + previous.retainedTail + "\0").getBytes(StandardCharsets.UTF_8));
         }
         StringBuilder name = new StringBuilder(); for (byte b : digest.digest()) name.append(String.format(Locale.ROOT, "%02x", b & 255));
         return name.toString();
