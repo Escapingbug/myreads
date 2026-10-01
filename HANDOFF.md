@@ -12,7 +12,7 @@
 
 ## 当前完成状态
 
-阅读、听书和更新功能已经实现。0.3.0 增加签名发布构建与 GitHub Actions 发布流程；尚未在实体手机上测试。
+阅读、听书和更新功能已经实现。0.3.0 已由 GitHub Actions 构建并公开发布，模拟器应用内下载与系统覆盖安装验证通过；尚未在实体手机上测试。
 
 - `src/App.vue`、`src/style.css`：移动端书架、继续阅读、搜索及分页、详情和完整目录预览、下载管理、ZIP/JSON/HTTPS 书源导入确认、启停与卸载、错误/空态、删除确认、原生返回键和应用生命周期。
 - `src/components/Reader.vue`：本地单章上下滚动、上下章、目录跳章、字号、行距、纸色/明亮/夜读、自动保存章节/段落/段内位置。未下载章节禁用。
@@ -73,6 +73,9 @@
 - `.github/workflows/android.yml`：main / PR 构建并测试，推送 `vX.Y.Z` 标签则构建签名 release APK，在资产全部上传后公开 Release，避免 App 读到不完整发布。版本标签必须匹配 package.json；发布说明放在 `docs/releases/X.Y.Z.md`。
 - 原生单元测试 19 项通过，新增更新版本、仓库地址/重定向和大小/哈希元数据边界测试。
 - 0.2.x 尚无更新功能，首次需手动覆盖安装 0.3.0，后续使用 App 内更新。
+- 实际发布：<https://github.com/Escapingbug/myreads/releases/tag/v0.3.0>；标签流水线 <https://github.com/Escapingbug/myreads/actions/runs/36799771941> 全部成功。线上 APK 大小 58,801,808 字节（56.1 MiB），SHA-256 `c858e4bb33dfb14227cab4ea3e4a361d6f0677490bd1709fcf0c5f7b0ad5e1ac`。本机 `release/` 已同步这份 GitHub 构建产物，而非本机构建的另一份 ZIP。
+- 模拟器 API35：用含更新功能的临时 0.2.2 / code4 构建加载原有数据，从公开 Release API 获取 0.3.0 / code5；App 原生下载约 37 MiB 后点击暂停，保留部分文件，继续并退到后台完成。安装包与线上 SHA-256 一致，原生包名/版本/签名验证通过，正常进入 Android 安装来源权限页和软件包安装程序，点击系统「更新」后已安装 0.3.0（无 DEBUGGABLE 标志）。重新打开书架保留《山间来信》及第二章阅读记录，听书模型仍显示已下载可离线使用，未重新下载模型。自动检查关闭后重启仍保持关闭，测试后已恢复开启。
+- 升级后再次手动检查显示「已经是最新版本」，不再提示下载同一版本。相关本机截图与发布清单保存在 `artifacts/update-*.png`、`artifacts/github-release/`、`artifacts/published-release.json`、`artifacts/update-verification.json`，不上传 Git。
 
 ## 运行方法
 
