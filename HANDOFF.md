@@ -12,7 +12,7 @@
 
 ## 当前完成状态
 
-阅读、听书和更新功能已经实现。当前 0.3.3 已修正引号对白切分、段落生成模式切换、句首裁剪及随机提前结束，本机测试与 Android 样例回归已通过，并已由 GitHub Actions 签名公开发布。0.3.2 的逐句 continuation 经用户长听反馈及本轮对照发现不稳定，当前生产版统一采用官方固定声音参考合成完整语组。尚未在实体手机量化长篇听感或耗电。详见下文。
+阅读、听书、更新和语音无障碍模式已经实现，0.3.4 已由 GitHub Actions 签名公开发布。无障碍模式由他人协助首次配置，日常不依赖 TalkBack，进入前必须实际加载现有 MOSS 模型。听书沿用 0.3.3 的完整对白切分、统一官方声音参考、句首保护及确定结束判定。尚未在实体手机量化长篇听感、无障碍操作延迟或耗电。详见下文。
 
 - `src/App.vue`、`src/style.css`：移动端书架、继续阅读、搜索及分页、详情和完整目录预览、下载管理、ZIP/JSON/HTTPS 书源导入确认、启停与卸载、错误/空态、删除确认、原生返回键和应用生命周期。
 - `src/components/Reader.vue`：本地单章上下滚动、上下章、目录跳章、字号、行距、纸色/明亮/夜读、自动保存章节/段落/段内位置。未下载章节禁用。
@@ -25,11 +25,11 @@
 - `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.4 / versionCode 9，原生插件已同步。版本从 `package.json` 读取。
 - `scripts/build-android.mjs`：当前 Mac 使用已安装的 JDK 21 / SDK；若 shell 配置的是旧 JDK，会切换到 Homebrew JDK 21。
 
-发布 APK：`release/zijian-0.3.3.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
+发布 APK：`release/zijian-0.3.4.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
 
 ## 已完成的验证
 
-- `npm test`：5 个测试文件、23 项测试通过；Android 原生单元测试 26 项通过。更新测试覆盖正式 Release 资产/清单、大小/哈希/版本匹配、版本升级判断、自动检查开关与节流、离线缓存、原生下载恢复和显式下载。原有 13 项覆盖听书边界及位置同步、书源包、数据边界、目录、下载队列、离线保存和恢复。
+- `npm test`：8 个测试文件、42 项测试通过；Android 原生单元测试 45 项通过。覆盖无障碍模型加载、提示暂停与恢复、触摸确认、搜索取消和历史保留，以及已有更新、听书、书源、下载和持久化回归。
 - `npm run build`：Vue / TypeScript 检查和 Vite 生产构建通过。
 - `npm run android:build`：JDK 21 / API 36 构建成功。
 - 浏览器 390 × 844：演示书源搜索、详情六章目录、整书下载、打开本地正文、切章、滚动；重载后仍有书籍与记录，第二章约 48% 位置恢复正确；ZIP 书源导入确认与更新成功。
@@ -212,3 +212,5 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - `library.ts`：历史独立持久化，初始化从已有进度迁移，删除本地书籍保留历史；重新下载按章节 ID 恢复进度并优先下载保存位置的章节，文件索引仍使用原目录位置。浏览列表使用快照，后台进度更新不会打乱正在浏览的顺序。
 - 验证：42 项前端测试、45 项原生测试通过，Vue/TypeScript/Vite 和 Android debug 构建通过，Android lint 无错误。API35 模拟器覆盖安装后保留书架、模型和进度，确认加载模型、生成及缓存提示、真实触摸选中/异处确认、书架浏览、重启恢复；原生完整提示播完后恢复为 playing，提示中主动暂停后恢复请求返回 false 并保持 paused。语音输入确认、迟到搜索和提示等待期间取消下载有组件测试；尚未验证真人中文语音识别成功率，也未在实体手机测量延迟/内存/耗电。模拟器首次加载约 6 秒，首次首页提示合成约 14 秒，不能保证提示立即响应，重复提示命中缓存。
 - 调试验证包：`artifacts/accessibility/zijian-accessibility-debug.apk`（功能开发时为 0.3.3/code8）。用户已明确要求直接发布供测试，发布版本递增为 0.3.4/code9，说明见 `docs/releases/0.3.4.md`；按已有标签流水线构建签名 APK 并发布更新清单。
+- 已公开发布：<https://github.com/Escapingbug/myreads/releases/tag/v0.3.4>。标签提交 `f43acc172279ae70a984de88854add2ea79838ec`；流水线 <https://github.com/Escapingbug/myreads/actions/runs/37747339444> 全部成功，87 项测试通过。线上 APK 为 58,844,039 bytes，SHA-256 `32aadb546c46ca2e3079b9bbfbe28dd1f910c2bc89692ff3836d9e015a3dadc5`；GitHub 资产摘要、update.json、SHA256SUMS 一致，`release/` 已同步实际线上资产。签名证书仍为 `a0abb5c432d5ada068efe059a63c1ec4adef40754a915559e0520538124c1112`；APK 不含模型权重，无 DEBUGGABLE 标记，应用使用的版本化 GitHub API 已返回 0.3.4 为最新正式版本。
+- 实际线上 APK 已覆盖安装至 API35 模拟器，安装版本 0.3.4/code9。升级前后 SQLite 书籍记录逐项一致，《山间来信》六章及 chapter2/paragraph18 阅读位置保留；13 个模型文件共 719,055,289 bytes 和 `.ready` 标记完整保留。正常书架界面已检查。验证材料在 `artifacts/accessibility/`（发布清单、签名/摘要核对、数据库快照、模型文件列表及 `release-shelf.png`），不提交。
