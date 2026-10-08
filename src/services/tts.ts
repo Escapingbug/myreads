@@ -41,7 +41,7 @@ interface TtsPlugin {
     bookId: string; title: string; chapter: number; paragraph: number; voice: string; speed: number; mode: PreparationMode;
     chapters: { id: string; title: string; downloaded: boolean }[];
   }): Promise<void>;
-  control(options: { action: "pause" | "resume" | "stop" | "speed"; speed?: number }): Promise<void>;
+  control(options: { action: "pause" | "resume" | "stop" | "speed" | "pauseForPrompt" | "resumeAfterPrompt"; speed?: number; bookId?: string; intent?: number }): Promise<unknown>;
   addListener(event: "modelState", callback: (status: ModelStatus) => void): Promise<PluginListenerHandle>;
   addListener(event: "playbackState", callback: (status: PlaybackStatus) => void): Promise<PluginListenerHandle>;
 }
@@ -153,6 +153,15 @@ export async function startListening(book: Book, chapter: number, paragraph: num
 export async function controlListening(action: "pause" | "resume" | "stop") {
   await native.control({ action });
   await refreshTts();
+}
+export interface PromptResumeToken { bookId: string; intent: number }
+export async function pauseForAnnouncement(): Promise<PromptResumeToken | undefined> {
+  const token = await native.control({ action: "pauseForPrompt" }) as PromptResumeToken | undefined;
+  await refreshTts(); return token;
+}
+export async function resumeAfterAnnouncement(token: PromptResumeToken) {
+  const result = await native.control({ action: "resumeAfterPrompt", ...token }) as { resumed?: boolean } | undefined;
+  await refreshTts(); return result?.resumed === true;
 }
 export function formatModelSize(bytes: number) { return `${(bytes / 1024 / 1024).toFixed(1)} MiB`; }
 

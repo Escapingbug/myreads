@@ -27,8 +27,6 @@ public final class BookPlaybackService extends MediaSessionService {
     private volatile Set<String> protectedCache = Collections.emptySet();
     private ExoPlayer player;
     private MediaSession session;
-    private volatile MossOnnxDemoEngine engine;
-    private NativeTokenizer tokenizer;
     private PowerManager.WakeLock synthesisWake;
     private volatile int generation;
     private volatile long bufferedMs;
@@ -45,6 +43,7 @@ public final class BookPlaybackService extends MediaSessionService {
     private volatile JSObject snapshot = new JSObject().put("phase", "idle");
     private long nextProgress;
     private long nextPreparation;
+    private long playbackIntent;
     private final Runnable heartbeat = new Runnable() {
         @Override public void run() {
             if (player != null && player.isPlaying()) { updateBuffer(); publish(false); main.postDelayed(this, 1000); }
@@ -68,6 +67,9 @@ public final class BookPlaybackService extends MediaSessionService {
         player.setWakeMode(C.WAKE_MODE_LOCAL);
         session = new MediaSession.Builder(this, new ForwardingPlayer(player) {
             @Override public void stop() { stopPlayback(); }
+            @Override public void pause() { pausePlayback(); }
+            @Override public void play() { resumePlayback(); }
+            @Override public void setPlayWhenReady(boolean value) { if (value) resumePlayback(); else pausePlayback(); }
             // Preparing a chapter is an active media request before the first WAV is queued.
             // Expose buffering so headset/lock-screen pause can suspend the producer too.
             @Override public int getPlaybackState() {
@@ -94,6 +96,7 @@ public final class BookPlaybackService extends MediaSessionService {
                 }
             }
             @Override public void onPlayWhenReadyChanged(boolean value, int reason) {
+                if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS || reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_BECOMING_NOISY) playbackIntent++;
                 wantsPlayback = value;
                 synthesisGate.setPaused(!value);
                 synchronized (bufferLock) { bufferLock.notifyAll(); }
@@ -127,10 +130,10 @@ public final class BookPlaybackService extends MediaSessionService {
         return super.onStartCommand(intent, flags, startId);
     }
     private void startBook(Intent intent) {
+        playbackIntent++;
         int token = ++generation;
         synthesisGate.cancel();
         SynthesisGate gate = new SynthesisGate(); synthesisGate = gate;
-        if (engine != null) engine.setCancelled(true);
         producing = true; wantsPlayback = true; error = ""; phase = "loading";
         bookId = intent.getStringExtra("bookId"); bookTitle = intent.getStringExtra("title");
         chapter = intent.getIntExtra("chapter", 0); paragraph = intent.getIntExtra("paragraph", 0);
@@ -161,13 +164,16 @@ public final class BookPlaybackService extends MediaSessionService {
     }
     private void produce(int token, SynthesisGate gate, String activeBook, String selectedVoice,
                          int startChapter, int startParagraph, String mode) {
+        SpeechModelRuntime.retainNarration();
         try {
             check(token);
             ModelRepository models = new ModelRepository(this);
             if (!models.ready()) throw new IOException("请先补充下载听书模型");
             gate.awaitReady(() -> {}, () -> {}); check(token);
-            if (tokenizer == null) tokenizer = new NativeTokenizer(new File(models.root, "MOSS-TTS-Nano-100M-ONNX/tokenizer.model"));
-            NarrationPlanner.TokenCounter counter = value -> tokenizer.tokenize(value).length;
+            NarrationPlanner.TokenCounter counter = value -> {
+                try { return SpeechModelRuntime.tokenize(this, value).length; }
+                catch (Exception failure) { throw new IllegalStateException(failure); }
+            };
             NarrationBuffer buffer = new NarrationBuffer(mode == null ? "auto" : mode,
                 Double.longBitsToDouble(getSharedPreferences("tts-performance", MODE_PRIVATE).getLong("ratio", 0)));
             JSONObject metadata = new JSONObject(LocalTtsFiles.text(new File(getFilesDir(), "tts-books/" + activeBook + ".json")));
@@ -210,6 +216,12 @@ public final class BookPlaybackService extends MediaSessionService {
                     Planned planned = units.removeFirst();
                     NarrationCache.Clip clip;
                     try { clip = audio(token, gate, models, selectedVoice, planned.unit, previous); }
+                    catch (SpeechModelRuntime.YieldNarration yielded) {
+                        units.addFirst(planned);
+                        gate.awaitReady(() -> {}, () -> {});
+                        check(token);
+                        continue;
+                    }
                     catch (FrameLimitException limit) {
                         List<NarrationPlanner.Unit> smaller = NarrationPlanner.retry(planned.unit, counter);
                         if (smaller.size() < 2) throw new IOException("这一句未能完整生成，请换一个声音后重试");
@@ -234,13 +246,12 @@ public final class BookPlaybackService extends MediaSessionService {
                 }
                 if (!ready.isEmpty()) enqueue(token, ch, title, ready);
             }
-            closeEngine();
             main.post(() -> { if (token == generation) { producing = false; preparation = ""; refreshPhase(); } });
         } catch (InterruptedException ignored) {
         } catch (Throwable failure) {
             android.util.Log.e("ZijianTts", "Synthesis failed", failure);
             main.post(() -> { if (token == generation) fail("听书未能继续：" + (failure instanceof OutOfMemoryError ? "可用内存不足" : failure.getMessage())); });
-        }
+        } finally { SpeechModelRuntime.releaseNarration(); }
     }
     private void preparing(int token, String title, boolean wholeChapter, int done, int count) {
         long now = SystemClock.elapsedRealtime();
@@ -288,13 +299,6 @@ public final class BookPlaybackService extends MediaSessionService {
         check(token);
     }
     private static final class FrameLimitException extends IOException {}
-    private void loadEngine(int token, SynthesisGate gate, ModelRepository models) throws Exception {
-        check(token); gate.awaitReady(() -> {}, () -> {});
-        if (engine != null) return;
-        synthesisWake.acquire(10 * 60 * 1000L);
-        try { engine = new MossOnnxDemoEngine(models.root, new File(getCacheDir(), "tts"), 2); }
-        finally { if (synthesisWake.isHeld()) synthesisWake.release(); }
-    }
     private NarrationCache.Clip audio(int token, SynthesisGate gate, ModelRepository models, String selectedVoice,
                                      NarrationPlanner.Unit unit, NarrationCache.Clip previous) throws Exception {
         File directory = new File(getCacheDir(), "tts"); directory.mkdirs();
@@ -307,23 +311,20 @@ public final class BookPlaybackService extends MediaSessionService {
             return cached;
         }
         if (directory.getUsableSpace() < 64L * 1024 * 1024) throw new IOException("存储空间不足，请先释放至少 64 MiB 空间");
-        loadEngine(token, gate, models); check(token); engine.setCancelled(false);
+        check(token); gate.awaitReady(() -> {}, () -> {});
         File partial = new File(directory, name + ".part"), partialCodes = new File(directory, name + ".codes.part");
         synthesisWake.acquire(10 * 60 * 1000L);
         NarrationCache.Clip clip;
         try {
-            SynthesisResult result = engine.synthesize(tokenizer.tokenize(unit.text), partial, selectedVoice, 375, 1234L, () -> {
+            SynthesisResult result = SpeechModelRuntime.synthesize(this, unit.text, partial, selectedVoice, () -> {
                 check(token);
-                gate.awaitReady(() -> {
-                    if (synthesisWake.isHeld()) synthesisWake.release();
-                    android.util.Log.i("ZijianTts", "Synthesis suspended");
-                }, () -> {
-                    synthesisWake.acquire(10 * 60 * 1000L);
-                    android.util.Log.i("ZijianTts", "Synthesis resumed");
-                });
+                // Release the shared model at a checkpoint; retry the uncommitted phrase
+                // after guidance. Never block a paused narrator while holding ONNX.
+                SpeechModelRuntime.checkNarration(gate);
+                gate.awaitModelReady(() -> { if (synthesisWake.isHeld()) synthesisWake.release(); },
+                    () -> synthesisWake.acquire(10 * 60 * 1000L), SpeechModelRuntime::guidancePending);
                 check(token);
-            }, previous == null ? null : previous.unit.ending,
-                previous == null ? 0 : previous.rawTrailing, previous == null ? 0 : previous.retainedTail);
+            }, previous);
             check(token);
             if (result.getGeneratedFrames() >= 375) throw new FrameLimitException();
             if (result.getDurationMs() <= 0 || !partial.renameTo(destination)) throw new IOException("音频文件保存失败");
@@ -365,7 +366,7 @@ public final class BookPlaybackService extends MediaSessionService {
         if (!wantsPlayback) phase = "paused";
         else if (player.isPlaying()) phase = "playing";
         else if (!producing && (player.getPlaybackState() == Player.STATE_ENDED || player.getMediaItemCount() == 0)) phase = "completed";
-        else phase = engine == null ? "loading" : "buffering";
+        else phase = SpeechModelRuntime.loaded() ? "buffering" : "loading";
         publish();
     }
     private void publish() {
@@ -385,41 +386,39 @@ public final class BookPlaybackService extends MediaSessionService {
         }
         TtsEvents.emit("playbackState", snapshot);
     }
-    void pausePlayback() { wantsPlayback = false; player.pause(); refreshPhase(); }
-    void resumePlayback() { wantsPlayback = true; player.play(); refreshPhase(); }
+    void pausePlayback() { playbackIntent++; wantsPlayback = false; player.pause(); refreshPhase(); }
+    void wakeForGuidance() { synthesisGate.wakeForPriority(); }
+    void resumePlayback() { playbackIntent++; wantsPlayback = true; player.play(); refreshPhase(); }
+    JSObject pauseForPrompt() {
+        wantsPlayback = false; player.pause(); refreshPhase();
+        return new JSObject().put("bookId", bookId).put("intent", playbackIntent);
+    }
+    boolean resumeAfterPrompt(String expectedBook, long expectedIntent) {
+        if (!bookId.equals(expectedBook) || playbackIntent != expectedIntent || !phase.equals("paused")) return false;
+        resumePlayback(); return true;
+    }
     void setSpeed(float value) { player.setPlaybackSpeed(value); }
     void stopPlayback() {
+        playbackIntent++;
         ++generation; producing = false; preparation = ""; pendingCache.clear();
         synthesisGate.cancel();
-        if (engine != null) engine.setCancelled(true);
-        inference.execute(this::closeEngine);
         phase = "idle"; player.stop(); player.clearMediaItems(); updateBuffer(); publish();
         stopForeground(STOP_FOREGROUND_REMOVE); stopSelf();
     }
     private void fail(String message) {
+        playbackIntent++;
         ++generation; producing = false; preparation = ""; pendingCache.clear(); error = message; phase = "error";
         synthesisGate.cancel();
-        if (engine != null) engine.setCancelled(true);
-        inference.execute(this::closeEngine);
         player.pause(); player.clearMediaItems(); updateBuffer(); publish();
         stopForeground(STOP_FOREGROUND_REMOVE);
     }
     @Override @Nullable public MediaSession onGetSession(MediaSession.ControllerInfo controllerInfo) {
         return controllerInfo.getUid() == android.os.Process.myUid() || controllerInfo.isTrusted() ? session : null;
     }
-    private void closeEngine() {
-        if (tokenizer != null) { tokenizer.close(); tokenizer = null; }
-        if (engine != null) {
-            engine.close(); engine = null;
-            android.util.Log.i("ZijianTts", "Released speech model");
-        }
-    }
     @Override public void onDestroy() {
         ++generation;
         synthesisGate.cancel();
-        if (engine != null) engine.setCancelled(true);
         synchronized (bufferLock) { bufferLock.notifyAll(); }
-        inference.execute(this::closeEngine);
         main.removeCallbacks(heartbeat);
         if (session != null) session.release();
         if (player != null) { player.release(); player = null; }

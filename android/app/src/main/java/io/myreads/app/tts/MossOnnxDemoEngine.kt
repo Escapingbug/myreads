@@ -36,6 +36,10 @@ class MossOnnxDemoEngine(
         setOptimizationLevel(OrtSession.SessionOptions.OptLevel.ALL_OPT)
         setIntraOpNumThreads(cpuThreads.coerceAtLeast(1))
         setInterOpNumThreads(1)
+        // A resident UI model sees many different prompt/KV/codec shapes. Avoid
+        // retaining their high-water temporary allocations for the entire mode.
+        setCPUArenaAllocator(false)
+        setMemoryPatternOptimization(false)
         // Sessions alternate on the same producer. Sleeping workers avoid spinning
         // while another graph is running, particularly during autoregressive decoding.
         addConfigEntry("session.intra_op.allow_spinning", "0")

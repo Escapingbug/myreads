@@ -39,6 +39,7 @@ export interface ChapterContent {
   paragraphs: string[];
 }
 export interface Book extends SourceBook {
+  downloadPriority?: string;
   localId: string;
   sourceId: string;
   sourceName: string;
@@ -55,6 +56,17 @@ export interface Book extends SourceBook {
     offset: number;
     updatedAt: number;
   } | null;
+}
+export interface ReadingHistory {
+  key: string;
+  book: SourceBook;
+  sourceId: string;
+  sourceName: string;
+  chapterId: string;
+  chapterTitle: string;
+  chapterIndex: number;
+  paragraph: number;
+  updatedAt: number;
 }
 export interface ReaderSettings {
   fontSize: number;

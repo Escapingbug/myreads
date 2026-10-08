@@ -51,6 +51,7 @@ public final class ZijianTtsPlugin extends Plugin {
     }
     @PluginMethod public void pauseDownload(PluginCall call) { ModelDownloadService.pause(); call.resolve(); }
     @PluginMethod public void removeModel(PluginCall call) {
+        if (SpeechModelRuntime.accessibilityEnabled()) { call.reject("请先退出无障碍模式，再删除语音模型"); return; }
         if (ModelDownloadService.running) { call.reject("请先暂停模型下载"); return; }
         getActivity().runOnUiThread(() -> {
             if (BookPlaybackService.current != null) BookPlaybackService.current.stopPlayback();
@@ -96,6 +97,10 @@ public final class ZijianTtsPlugin extends Plugin {
             BookPlaybackService active = BookPlaybackService.current;
             if (active != null) {
                 switch (call.getString("action", "")) {
+                    case "pauseForPrompt": call.resolve(active.pauseForPrompt()); return;
+                    // JSON parses small JS integers as Integer, while PluginCall.getLong
+                    // accepts only Long. optLong preserves the returned intent either way.
+                    case "resumeAfterPrompt": call.resolve(new JSObject().put("resumed", active.resumeAfterPrompt(call.getString("bookId", ""), call.getData().optLong("intent", -1L)))); return;
                     case "pause": active.pausePlayback(); break;
                     case "resume": active.resumePlayback(); break;
                     case "stop": active.stopPlayback(); break;
@@ -103,6 +108,7 @@ public final class ZijianTtsPlugin extends Plugin {
                     default: call.reject("未知听书操作"); return;
                 }
             }
+            if (call.getString("action", "").equals("resumeAfterPrompt")) { call.resolve(new JSObject().put("resumed", false)); return; }
             call.resolve();
         });
     }

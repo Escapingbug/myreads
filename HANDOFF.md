@@ -1,6 +1,6 @@
 # 纸间 Android 小说阅读器：项目交接
 
-更新时间：2026-10-01
+更新时间：2026-10-08
 
 ## 用户目标与范围
 
@@ -22,7 +22,7 @@
 - `src/services/html.ts`：将 HTML 片段包在 body 中，修正 linkedom 对目录展开片段的不同处理，避免丢失中间章节。
 - `src/services/http.ts`、`dev-proxy.ts`：Android 原生 HTTP；开发期本机 HTTPS 代理，校验域名、DNS 公网 IP、固定已校验地址、请求/响应大小及超时。已修复 Node 26 的 DNS `lookup` 全量返回格式。
 - `src/services/packages.ts`、`import.ts`：书源包格式、域名与大小验证；ZIP/JSON 解码，HTTPS 下载包，安装前显示名称、版本和声明域名。
-- `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.3 / versionCode 8，原生插件已同步。版本从 `package.json` 读取。
+- `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.4 / versionCode 9，原生插件已同步。版本从 `package.json` 读取。
 - `scripts/build-android.mjs`：当前 Mac 使用已安装的 JDK 21 / SDK；若 shell 配置的是旧 JDK，会切换到 Homebrew JDK 21。
 
 发布 APK：`release/zijian-0.3.3.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
@@ -201,3 +201,14 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - `npm audit` 当前 3 个 moderate，均为开发期 `@capacitor/cli → xcode → uuid` 链条；不在 Android App 运行时。尚未做依赖降级或强制升级。
 - 当前 `lucide-vue-next` 可编译运行，但包被标记 deprecated；后续可评估迁移，当前未为此扩大改动。
 - 签名发布配置与版本策略已经接入。当前正式 APK 沿用早期安装包的证书以支持覆盖升级；密钥保存在本机与 GitHub Actions Secrets，不能提交到仓库。
+
+## 语音无障碍模式（0.3.4，2026-10-08）
+
+- 用户确认首次配置由他人协助，日常不依赖 TalkBack；开启无障碍模式必须真正加载现有 MOSS 模型。入口为「设置 → 语音无障碍模式」，可先配置麦克风权限。模型缺失、校验未完成或加载失败时保留普通界面；记住开关，下次启动先加载再进入模式，不自动下载模型。
+- `AccessibleMode.vue` / `accessibility-input.ts`：首页继续上次、最近读听、书架、找新书；书籍、历史和搜索结果统一一次一本，简介、目录、换段及语速，大按钮、固定返回和帮助、明确退出确认。触摸/移动探索与执行分开；两次确认点都落在其他区域也保留原选择，页面切换取消待确认触摸。320×568、320×640、390×844 布局已检查，最小触控高度 56px，返回始终可见。
+- `accessibility.ts` / `ZijianAccessibilityPlugin`：提示全部由本地 MOSS 模型合成，按音色和文本缓存（64 MiB），新提示替换旧提示。录音先等待提示结束，提示音表示识别就绪；识别结果读回后确认搜索、支持最近搜索和切换书源。权限弹窗在普通设置页由协助者处理，模式内缺少授权时返回语音错误提示。Android `SpeechRecognizer` 是独立识别服务，模型本身不承担语音识别，可能联网。当前发现新书支持语音搜索和未听过的本地书，没有新增在线分类/榜单书源协议。
+- `SpeechModelRuntime`：正文和提示共用一套 ONNX 会话及分词器，公平锁串行推理；模式开启期间持有模型，禁止删除模型。操作提示优先，在检查点让出正文合成，未提交的语组随后重试；普通模式暂停仍保留推理状态。新增优先级唤醒，防止先前暂停的合成持有模型而阻塞开启模式。播报前暂停正文，恢复前核对书籍和播放意图，媒体键暂停、停止、音频焦点丢失及耳机拔出会阻止自动恢复。播放意图用 JSON `optLong` 读回，避免 Capacitor `getLong` 拒绝小整数导致恢复失败。
+- 驻留模型关闭 ONNX CPU arena / memory pattern，避免不同提示形状的临时分配持续占据高水位；模拟器观察到的进程驻留内存由长时间运行中的 6GB 级降至后续检查约 1.1–1.4GB，尚不能代表实体手机的长时间占用。模型对“下一本”这种裸短词曾长时间不结束，触摸按钮统一朗读完整的“这是…按钮。”；首次该句约 10 秒完成，缓存后约 2.3 秒（包含播放本身）。
+- `library.ts`：历史独立持久化，初始化从已有进度迁移，删除本地书籍保留历史；重新下载按章节 ID 恢复进度并优先下载保存位置的章节，文件索引仍使用原目录位置。浏览列表使用快照，后台进度更新不会打乱正在浏览的顺序。
+- 验证：42 项前端测试、45 项原生测试通过，Vue/TypeScript/Vite 和 Android debug 构建通过，Android lint 无错误。API35 模拟器覆盖安装后保留书架、模型和进度，确认加载模型、生成及缓存提示、真实触摸选中/异处确认、书架浏览、重启恢复；原生完整提示播完后恢复为 playing，提示中主动暂停后恢复请求返回 false 并保持 paused。语音输入确认、迟到搜索和提示等待期间取消下载有组件测试；尚未验证真人中文语音识别成功率，也未在实体手机测量延迟/内存/耗电。模拟器首次加载约 6 秒，首次首页提示合成约 14 秒，不能保证提示立即响应，重复提示命中缓存。
+- 调试验证包：`artifacts/accessibility/zijian-accessibility-debug.apk`（功能开发时为 0.3.3/code8）。用户已明确要求直接发布供测试，发布版本递增为 0.3.4/code9，说明见 `docs/releases/0.3.4.md`；按已有标签流水线构建签名 APK 并发布更新清单。

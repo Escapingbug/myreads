@@ -1635,3 +1635,34 @@ progress::-moz-progress-bar {
 .settings-links button { display: flex; align-items: center; width: 100%; gap: 12px; padding: 20px; color: var(--green); }
 .settings-links button + button { border-top: 1px solid var(--line); }
 .settings-links span { flex: 1; text-align: left; font-size: 14px; }
+
+.accessibility-settings { margin: 24px 0; padding: 24px; border: 1px solid var(--line); border-radius: 16px; background: #fff; }
+.accessibility-settings h2 { font-size: 20px; }
+.accessibility-settings p { margin: 12px 0; line-height: 1.7; }
+.accessibility-settings [role="alert"] { color: #a62c20; }
+.a11y-loading { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 32px; background: #121914; color: #fff; font-size: 28px; }
+.accessible-mode { max-width: 720px; margin: auto; min-height: 100dvh; padding: calc(12px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom)); background: #121914; color: #fff; display: flex; flex-direction: column; gap: 12px; touch-action: none; user-select: none; }
+.accessible-mode h1 { font-size: 26px; text-align: center; }
+.accessible-mode button { min-height: 88px; width: 100%; padding: 16px; border: 3px solid #b5c9ba; border-radius: 12px; background: #24362a; color: #fff; font-size: 28px; font-weight: 600; line-height: 1.4; overflow-wrap: anywhere; touch-action: none; }
+.accessible-mode button:focus-visible { outline: 4px solid #ffe28a; outline-offset: 2px; }
+.accessible-mode button.selected { border-color: #ffe28a; background: #40513a; }
+.accessible-mode .a11y-summary { min-height: 128px; background: #19251d; font-size: 22px; font-weight: 400; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.a11y-controls { display: flex; flex-direction: column; gap: 12px; flex: 1; }
+.a11y-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+.accessible-mode .a11y-primary { min-height: 144px; background: #ffe28a; border-color: #ffe28a; color: #121914; font-size: 34px; }
+.a11y-feedback { font-size: 18px; line-height: 1.5; min-height: 28px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 360px) { .accessible-mode button { font-size: 24px; padding: 12px; } .accessible-mode .a11y-primary { font-size: 30px; } }
+@media (max-height: 760px) {
+  .accessible-mode { gap: 8px; padding: calc(8px + env(safe-area-inset-top)) 8px calc(8px + env(safe-area-inset-bottom)); }
+  .accessible-mode h1 { font-size: 24px; }
+  .accessible-mode button { min-height: 64px; font-size: 24px; padding: 10px; }
+  .accessible-mode .a11y-primary { min-height: 96px; font-size: 28px; }
+  .accessible-mode .a11y-summary { min-height: 100px; font-size: 20px; -webkit-line-clamp: 3; }
+  .a11y-controls, .a11y-row { gap: 8px; }
+}
+@media (max-height: 650px) {
+  .accessible-mode button { min-height: 56px; font-size: 22px; padding: 8px; }
+  .accessible-mode .a11y-primary { min-height: 88px; font-size: 26px; }
+  .accessible-mode .a11y-summary { min-height: 88px; font-size: 18px; }
+  .a11y-feedback { font-size: 16px; min-height: 24px; }
+}

@@ -28,6 +28,9 @@ import BookCover from "./components/BookCover.vue";
 import Reader from "./components/Reader.vue";
 import ListeningSettings from "./components/ListeningSettings.vue";
 import AppUpdate from "./components/AppUpdate.vue";
+import AccessibilitySettings from "./components/AccessibilitySettings.vue";
+import AccessibleMode from "./components/AccessibleMode.vue";
+import { accessibility, initializeAccessibility, cancelAnnouncements, cancelRecognition } from "./services/accessibility";
 import { updates, initializeUpdates, checkUpdates, refreshUpdates } from "./services/updates";
 import { tts, listeningMessage, initializeTts, refreshTts, ttsAction, controlListening } from "./services/tts";
 import type {
@@ -62,6 +65,7 @@ const booting = ref(false);
 const notice = ref("");
 const readerBook = ref<Book>();
 const reader = ref<InstanceType<typeof Reader>>();
+const accessibleMode = ref<InstanceType<typeof AccessibleMode>>();
 const keyword = ref("");
 const sourceId = ref("");
 const results = ref<SourceBook[]>([]);
@@ -321,7 +325,7 @@ function readingLabel(book: Book) {
 function deleteBook(book: Book) {
   confirmation.value = {
     title: `删除《${book.title}》？`,
-    message: "将移除本机上的章节文件和阅读记录，需要阅读时可重新下载。",
+    message: "将移除本机上的章节文件，最近读听记录会保留，需要阅读时可重新下载。",
     label: "删除书籍",
     action: async () => {
       if (tts.playback.bookId === book.localId) await controlListening("stop");
@@ -404,7 +408,8 @@ async function approvePackage() {
   }
 }
 function back() {
-  if (readerBook.value) reader.value?.handleBack();
+  if (accessibility.enabled) accessibleMode.value?.back();
+  else if (readerBook.value) reader.value?.handleBack();
   else if (confirmation.value && !actionBusy.value)
     confirmation.value = undefined;
   else if (pendingPackage.value && !importBusy.value)
@@ -420,11 +425,14 @@ onMounted(async () => {
   window.addEventListener("keydown", keyboard);
   await boot();
   await initializeTts().catch((error: Error) => notify(error.message));
+  if (state.initialized) await initializeAccessibility().catch((error: Error) => notify(error.message));
   void initializeUpdates().then(() => checkUpdates()).catch((error: Error) => { updates.error = error.message; });
   if (Capacitor.isNativePlatform()) {
     listeners.push(await NativeApp.addListener("backButton", back));
     listeners.push(
       await NativeApp.addListener("appStateChange", ({ isActive }) => {
+        accessibility.active = isActive;
+        if (!isActive) { void cancelAnnouncements(); void cancelRecognition(); }
         if (isActive) void refreshTts().catch((error: Error) => notify(error.message));
         if (isActive) void initializeUpdates().then(async () => { await refreshUpdates(); await checkUpdates(); }).catch((error: Error) => { updates.error = error.message; });
         if (!isActive) {
@@ -451,7 +459,9 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="app-shell">
+  <AccessibleMode v-if="accessibility.enabled && state.initialized" ref="accessibleMode" />
+  <div v-else class="app-shell">
+    <div v-if="accessibility.preparing" class="a11y-loading" role="status">正在加载无障碍语音模型，请稍候…</div>
     <header class="app-header">
       <a class="brand" href="#" @click.prevent="navigate('shelf')"
         ><span class="brand-symbol"
@@ -933,6 +943,7 @@ onBeforeUnmount(() => {
       <template v-else-if="view === 'settings'">
         <div class="page-heading"><div><p class="eyebrow">MAKE YOURSELF AT HOME</p><h1>设置<span class="heading-dot">.</span></h1><p class="subtitle">照顾好阅读，也保持应用常新。</p></div></div>
         <AppUpdate />
+        <AccessibilitySettings />
         <div class="settings-links"><button @click="navigate('sources')"><Library :size="19" /><span>管理书源</span><ChevronRight :size="17" /></button><button @click="navigate('listen')"><Headphones :size="19" /><span>听书模型与声音</span><ChevronRight :size="17" /></button></div>
       </template>
     </main>

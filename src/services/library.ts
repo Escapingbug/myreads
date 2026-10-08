@@ -8,6 +8,7 @@ import type {
   SourceBook,
   SourcePackage,
   ChapterContent,
+  ReadingHistory,
 } from "../types";
 import { storage } from "./storage";
 import { SourceRuntime } from "./runtime";
@@ -16,6 +17,7 @@ import { validatePackage } from "./packages";
 export const state = reactive({
   initialized: false,
   books: [] as Book[],
+  history: [] as ReadingHistory[],
   sources: [] as InstalledSource[],
   settings: { fontSize: 20, lineHeight: 1.9, theme: "paper" } as ReaderSettings,
   activeDownload: "" as string,
@@ -26,6 +28,11 @@ export async function initialize() {
   await storage.init();
   state.books = (await storage.books()).sort((a, b) => b.addedAt - a.addedAt);
   state.sources = await storage.sources();
+  state.history = await storage.list<ReadingHistory>("history:");
+  for (const book of state.books) {
+    const previous = state.history.find((item) => item.key === historyKey(book.sourceId, book.id));
+    if (book.progress && (!previous || previous.updatedAt < book.progress.updatedAt)) await rememberHistory(book);
+  }
   const settings = await storage.settings();
   if (settings) Object.assign(state.settings, settings);
   // An interrupted process resumes only on explicit user action.
@@ -147,6 +154,11 @@ export async function addDownload(
       state: "queued",
       progress: null,
     };
+    const history = state.history.find((item) => item.key === historyKey(book.sourceId, book.id));
+    if (history && chapters.some((chapter) => chapter.id === history.chapterId)) {
+      book.progress = { chapterId: history.chapterId, paragraph: history.paragraph, offset: 0, updatedAt: history.updatedAt };
+      book.downloadPriority = history.chapterId;
+    }
     // Snapshot the package, so source updates/removal cannot break this task.
     await storage.put(`snapshot:${book.localId}`, source);
     await storage.saveBook(book);
@@ -239,7 +251,10 @@ async function downloadBook(book: Book) {
     const done = new Set(book.downloaded);
     const failed: string[] = [];
     let consecutiveFailures = 0;
-    for (let index = 0; index < book.chapters.length; index++) {
+    const indexes = book.chapters.map((_, index) => index);
+    const priority = book.chapters.findIndex((chapter) => chapter.id === book.downloadPriority);
+    if (priority > 0) indexes.unshift(...indexes.splice(priority, 1));
+    for (const index of indexes) {
       controller.signal.throwIfAborted();
       const chapter = book.chapters[index]!;
       if (done.has(chapter.id)) continue;
@@ -307,4 +322,21 @@ export async function saveProgress(
 ) {
   book.progress = { chapterId, paragraph, offset, updatedAt: Date.now() };
   await storage.saveBook(book);
+  await rememberHistory(book);
+}
+export function historyKey(sourceId: string, bookId: string) { return JSON.stringify([sourceId, bookId]); }
+async function rememberHistory(book: Book) {
+  if (!book.progress) return;
+  const chapterIndex = book.chapters.findIndex((chapter) => chapter.id === book.progress!.chapterId);
+  if (chapterIndex < 0) return;
+  const entry: ReadingHistory = {
+    key: historyKey(book.sourceId, book.id),
+    book: { id: book.id, title: book.title, author: book.author, description: book.description, category: book.category, url: book.url },
+    sourceId: book.sourceId, sourceName: book.sourceName,
+    chapterId: book.progress.chapterId, chapterTitle: book.chapters[chapterIndex]!.title,
+    chapterIndex, paragraph: book.progress.paragraph, updatedAt: book.progress.updatedAt,
+  };
+  await storage.put(`history:${entry.key}`, entry);
+  const index = state.history.findIndex((item) => item.key === entry.key);
+  if (index >= 0) state.history[index] = entry; else state.history.push(entry);
 }

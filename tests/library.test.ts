@@ -82,6 +82,8 @@ beforeEach(async () => {
   await pauseAll();
   await wait(() => !state.activeDownload);
   for (const book of [...state.books]) await removeBook(book);
+  for (const entry of await storage.list<{ key: string }>("history:")) await storage.remove(`history:${entry.key}`);
+  state.history = [];
   state.sources = [];
   control.requests = [];
   control.fail.clear();
@@ -89,6 +91,21 @@ beforeEach(async () => {
   await installSource(source);
 });
 describe("下载、本地持久化与恢复", () => {
+  it("删除本地内容保留历史，重新下载优先恢复原章节", async () => {
+    const book = await addDownload(source, ref);
+    await wait(() => book.state === "ready");
+    await saveProgress(book, "2", 7, 0.25);
+    await removeBook(book);
+    expect(state.history[0]).toMatchObject({ chapterId: "2", paragraph: 7, book: { title: "测试小说" } });
+    await initialize();
+    expect(state.history).toHaveLength(1);
+    control.requests = [];
+    const restored = await addDownload(source, ref);
+    await wait(() => restored.state === "ready");
+    expect(control.requests[0]).toBe("2");
+    expect(restored.progress).toMatchObject({ chapterId: "2", paragraph: 7 });
+    expect(await storage.chapter(restored.localId, 2)).toEqual({ paragraphs: ["章节2正文"] });
+  });
   it("目录分页重复时停止，避免将不完整目录当成整本", async () => {
     control.nextCursor = "repeat";
     await expect(collectBook(source, ref)).rejects.toThrow("目录分页重复");
