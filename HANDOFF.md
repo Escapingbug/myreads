@@ -12,7 +12,7 @@
 
 ## 当前完成状态
 
-阅读、听书、更新和语音无障碍模式已经实现，0.3.7 已由 GitHub Actions 签名公开发布，有界跨句续接及解码优化已完成本机验证。默认听书在首个语组完成后开始播放，旧自动设置迁移为边生成边播放。无障碍模式由他人协助首次配置，日常不依赖 TalkBack，进入前必须实际加载现有 MOSS 模型。0.3.6 默认使用完整语组文字与语音 token 的有界续接，可在听书页切换独立朗读；句首保护和确定结束判定保留。尚未在实体手机量化长篇听感、无障碍操作延迟或耗电。详见下文。
+阅读、听书、更新和语音无障碍模式已经实现，0.3.8 已由 GitHub Actions 签名公开发布，中断对白分组、固定参考续接及异常短句重试已完成本机验证。默认听书在首个语组完成后开始播放，旧自动设置迁移为边生成边播放。无障碍模式由他人协助首次配置，日常不依赖 TalkBack，进入前必须实际加载现有 MOSS 模型。0.3.6 默认使用完整语组文字与语音 token 的有界续接，可在听书页切换独立朗读；句首保护和确定结束判定保留。尚未在实体手机量化长篇听感、无障碍操作延迟或耗电。详见下文。
 
 - `src/App.vue`、`src/style.css`：移动端书架、继续阅读、搜索及分页、详情和完整目录预览、下载管理、ZIP/JSON/HTTPS 书源导入确认、启停与卸载、错误/空态、删除确认、原生返回键和应用生命周期。
 - `src/components/Reader.vue`：本地单章上下滚动、上下章、目录跳章、字号、行距、纸色/明亮/夜读、自动保存章节/段落/段内位置。未下载章节禁用。
@@ -22,14 +22,14 @@
 - `src/services/html.ts`：将 HTML 片段包在 body 中，修正 linkedom 对目录展开片段的不同处理，避免丢失中间章节。
 - `src/services/http.ts`、`dev-proxy.ts`：Android 原生 HTTP；开发期本机 HTTPS 代理，校验域名、DNS 公网 IP、固定已校验地址、请求/响应大小及超时。已修复 Node 26 的 DNS `lookup` 全量返回格式。
 - `src/services/packages.ts`、`import.ts`：书源包格式、域名与大小验证；ZIP/JSON 解码，HTTPS 下载包，安装前显示名称、版本和声明域名。
-- `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.7 / versionCode 12，原生插件已同步。版本从 `package.json` 读取。
+- `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.8 / versionCode 13，原生插件已同步。版本从 `package.json` 读取。
 - `scripts/build-android.mjs`：当前 Mac 使用已安装的 JDK 21 / SDK；若 shell 配置的是旧 JDK，会切换到 Homebrew JDK 21。
 
-发布 APK：`release/zijian-0.3.7.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
+发布 APK：`release/zijian-0.3.8.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
 
 ## 已完成的验证
 
-- `npm test`：8 个测试文件、44 项测试通过；Android 原生单元测试 59 项通过。覆盖解码状态复用、起播静音格式、播放准备方式迁移、无障碍模型加载、提示暂停与恢复、触摸确认、搜索取消和历史保留，以及已有更新、听书、书源、下载和持久化回归。
+- `npm test`：8 个测试文件、44 项测试通过；Android 原生单元测试 65 项通过。覆盖中断对白、异常短句限制、完整转录、解码状态复用、起播静音格式、播放准备方式迁移、无障碍模型加载、提示暂停与恢复、触摸确认、搜索取消和历史保留，以及已有更新、听书、书源、下载和持久化回归。
 - `npm run build`：Vue / TypeScript 检查和 Vite 生产构建通过。
 - `npm run android:build`：JDK 21 / API 36 构建成功。
 - 浏览器 390 × 844：演示书源搜索、详情六章目录、整书下载、打开本地正文、切章、滚动；重载后仍有书籍与记录，第二章约 48% 位置恢复正确；ZIP 书源导入确认与更新成功。
@@ -270,3 +270,5 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - API35 / 俊豪 / 1 倍速完成六语组实际播放：异常短句先被拒绝，后只保存及播放 14 帧的重新采样；用户原文带 204 帧、三段完整前文，生成 146 帧 / 11.68 秒原始语音（WAV 含外部停顿为 12.202 秒），ASR 识别到整段内容，含同音字误差。六语组随后缓存回放全部命中、播放完成，无新的模型合成。
 
 记录在 `artifacts/feedback-0.3.7/`（不提交）。版本 0.3.8 / code13。实际手机的语速稳定性、吞字与“呵”等感叹词仍需要用户试听，不能宣称所有语句都已修复。
+
+- 0.3.8 已公开为 latest：<https://github.com/Escapingbug/myreads/releases/tag/v0.3.8>，源码 `f52cc8037636cd44e2353497d80fa72dca34f9f9`，流水线 <https://github.com/Escapingbug/myreads/actions/runs/37789995653> 第 2 次执行成功（第一次仅发布任务的 NDK 下载 ZIP 损坏，验证任务通过）。APK 58,844,243 bytes，SHA-256 `ca51e571e5e3646df3987e2debf70382835fbc6ebfd9eb65a18ea1d3f740fc02`，签名与旧版一致。APK / update.json / SHA256SUMS / GitHub assets 摘要一致；非调试、不含模型，已确认新提示方法、SpeechQuality 和两项缓存 revision 进入 Dex。正式 APK 已覆盖安装 API35 为 0.3.8 / code13；原数据库 7 条记录逐值一致，原 chapter2 / paragraph18、13 个模型文件保留，书架正常。临时章节和六个生成缓存清理，原播放／性能偏好恢复。最后一次原生检查的短句主动耗时 31,663ms，包含 26,612ms 失败重试；最终可播原始语音仍只有 14 帧 / 1.12 秒。
