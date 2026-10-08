@@ -78,15 +78,22 @@ class MossOnnxDemoEngine(
         val inputRows = if (continuationTokenIds == null) buildInputRows(textTokenIds, voice)
             else buildContinuationRows(continuationTokenIds, prefixAudioCodes)
         val prefillResult = runPrefill(inputRows)
+        val prefillMs = (System.nanoTime() - startedAt - waitedNanos) / 1000000
+        var stageStart = System.nanoTime(); var stageWait = waitedNanos
         val audioTokens = runDecode(prefillResult, maxFrames, seed, activeCheckpoint)
+        val generationMs = (System.nanoTime() - stageStart - (waitedNanos - stageWait)) / 1000000
         if (audioTokens.size >= maxFrames || audioTokens.isEmpty())
             return SynthesisResult(outputFile, audioTokens.size, 48000, 0, (System.nanoTime() - startedAt - waitedNanos) / 1000000, audioTokens)
         activeCheckpoint.awaitReady()
-        // Prime a fresh codec with exactly the same prefix as the model. Prefix
-        // audio is discarded; only newly generated samples reach the WAV/player.
+        // The codec state must represent exactly the model's prefix. Retain that
+        // state across matching requests; emit only newly generated samples.
+        stageStart = System.nanoTime(); stageWait = waitedNanos
         val raw = codec.decode(audioTokens, activeCheckpoint, prefixAudioCodes)
+        val codecMs = (System.nanoTime() - stageStart - (waitedNanos - stageWait)) / 1000000
         activeCheckpoint.awaitReady()
+        stageStart = System.nanoTime(); stageWait = waitedNanos
         val bounds = speechEdges.detect(raw, activeCheckpoint)
+        val vadMs = (System.nanoTime() - stageStart - (waitedNanos - stageWait)) / 1000000
         val rendered = NarrationTiming.render(raw, bounds[0], bounds[1], previousBoundary, previousRawTail, previousRetainedTail)
         activeCheckpoint.awaitReady()
         val sampleRate = codecMeta.codecConfig.sampleRate
@@ -100,6 +107,8 @@ class MossOnnxDemoEngine(
             elapsedMs = elapsedMs,
             audioCodes = audioTokens,
             rawLeading = rendered.leading, rawTrailing = rendered.trailing, retainedTail = rendered.retainedTail,
+            prefillMs = prefillMs, generationMs = generationMs, codecMs = codecMs, vadMs = vadMs,
+            codecWarmFrames = codec.warmedFrames,
         )
     }
 
@@ -462,6 +471,11 @@ data class SynthesisResult(
     val rawLeading: Int = 0,
     val rawTrailing: Int = 0,
     val retainedTail: Int = 0,
+    val prefillMs: Long = 0,
+    val generationMs: Long = 0,
+    val codecMs: Long = 0,
+    val vadMs: Long = 0,
+    val codecWarmFrames: Int = 0,
 )
 
 private data class ModelManifest(

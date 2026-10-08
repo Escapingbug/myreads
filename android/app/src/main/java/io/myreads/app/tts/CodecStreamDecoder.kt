@@ -6,12 +6,16 @@ import java.nio.FloatBuffer
 import java.nio.IntBuffer
 import org.json.JSONObject
 
-/** Reset each request, then warm its aligned prefix without emitting prefix audio. */
+/** Reuse state only when it represents the exact beginning of the next prefix. */
 internal class CodecStreamDecoder(private val env: OrtEnvironment, private val session: OrtSession, metadata: JSONObject) : Closeable {
+    private val batchFrames = 16
     private data class State(val input: String, val output: String, val shape: LongArray, val integer: Boolean, val initial: Int = 0)
     private val states = mutableListOf<State>()
     private val zeros = linkedMapOf<String, OnnxTensor>()
     private var previous: OrtSession.Result? = null
+    private val history = CodecHistory()
+    var warmedFrames: Int = 0
+        private set
     init {
         val stream = metadata.getJSONObject("streaming_decode")
         val offsets = stream.getJSONArray("transformer_offsets")
@@ -38,20 +42,48 @@ internal class CodecStreamDecoder(private val env: OrtEnvironment, private val s
         else OnnxTensor.createTensor(env, FloatBuffer.wrap(FloatArray(count)), state.shape)
     }
     fun decode(codes: List<IntArray>, checkpoint: SynthesisCheckpoint, prefix: List<IntArray> = emptyList()): FloatArray {
-        reset()
+        val reusable = history.reusableFrames(prefix)
+        if (reusable < 0) reset()
+        warmedFrames = 0
         try {
             // Bound transient waveform allocations during prefix warm-up. State
             // stays continuous across these batches and the new target codes.
-            for (chunk in prefix.chunked(32)) { checkpoint.awaitReady(); run(chunk) }
-            checkpoint.awaitReady()
-            val next = run(codes)
-            val audio = next.get("audio").get() as OnnxTensor
-            val channels = (audio.value as Array<*>)[0] as Array<*>
-            val arrays = channels.map { it as FloatArray }
-            val length = ((next.get("audio_lengths").get() as OnnxTensor).intBuffer).get(0)
-            require(length == codes.size * 3840) { "语音解码长度不一致" }
-            return FloatArray(length) { index -> arrays.sumOf { it[index].toDouble() }.toFloat() / arrays.size }
-        } finally { reset() }
+            for (chunk in prefix.drop(reusable.coerceAtLeast(0)).chunked(batchFrames)) {
+                checkpoint.awaitReady(); run(chunk); warmedFrames += chunk.size
+            }
+            val mono = FloatArray(codes.size * 3840)
+            var offset = 0
+            // Keep the codec's causal state while bounding attention/waveform
+            // allocations. This does not split text or change the TTS request.
+            for (chunk in codes.chunked(batchFrames)) {
+                checkpoint.awaitReady()
+                val next = run(chunk)
+                offset += copyMono(next, chunk.size * 3840, mono, offset)
+            }
+            require(offset == mono.size) { "语音解码长度不一致" }
+            history.accept(prefix, codes)
+            return mono
+        } catch (failure: Throwable) {
+            reset(); throw failure
+        }
+    }
+    private fun copyMono(next: OrtSession.Result, expected: Int, mono: FloatArray, offset: Int): Int {
+        val audio = next.get("audio").get() as OnnxTensor
+        val length = ((next.get("audio_lengths").get() as OnnxTensor).intBuffer).get(0)
+        require(length == expected) { "语音解码长度不一致" }
+        val shape = audio.info.shape
+        require(shape.size == 3 && shape[0] == 1L && shape[1] > 0 && shape[2] >= length) { "语音解码形状不一致" }
+        // Read channel-major PCM directly, avoiding nested Java array copies
+        // and a per-sample collection reduction for a whole utterance.
+        val channels = shape[1].toInt(); val stride = shape[2].toInt()
+        val data = audio.floatBuffer
+        if (channels == 1) data.get(mono, offset, length)
+        else for (i in 0 until length) {
+            var sum = 0.0
+            for (channel in 0 until channels) sum += data.get(channel * stride + i).toDouble()
+            mono[offset + i] = sum.toFloat() / channels
+        }
+        return length
     }
     private fun run(codes: List<IntArray>): OrtSession.Result {
         require(codes.isNotEmpty())
@@ -67,6 +99,6 @@ internal class CodecStreamDecoder(private val env: OrtEnvironment, private val s
             }
         }
     }
-    private fun reset() { previous?.close(); previous = null }
+    private fun reset() { previous?.close(); previous = null; history.clear() }
     override fun close() { reset(); zeros.values.forEach { it.close() }; zeros.clear() }
 }

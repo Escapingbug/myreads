@@ -87,7 +87,7 @@ public final class BookPlaybackService extends MediaSessionService {
         setMediaNotificationProvider(new DefaultMediaNotificationProvider.Builder(this).setNotificationId(3002).build());
         player.addListener(new Player.Listener() {
             @Override public void onMediaItemTransition(@Nullable MediaItem item, int reason) {
-                if (item != null && item.mediaMetadata.extras != null) {
+                if (item != null && item.mediaMetadata.extras != null && item.mediaMetadata.extras.containsKey("chapter")) {
                     Bundle extras = item.mediaMetadata.extras;
                     chapter = extras.getInt("chapter"); paragraph = extras.getInt("paragraph");
                     progressAt = System.currentTimeMillis();
@@ -296,6 +296,8 @@ public final class BookPlaybackService extends MediaSessionService {
     }
     private void enqueue(int token, int chapterIndex, String title, List<Ready> clips) throws Exception {
         List<Ready> batch = new ArrayList<>(clips);
+        float outputSpeed = speed;
+        File outputStart = PlaybackWarmup.audio(new File(getCacheDir(), "tts-output"), outputSpeed);
         CountDownLatch added = new CountDownLatch(1);
         main.post(() -> {
             try {
@@ -309,10 +311,17 @@ public final class BookPlaybackService extends MediaSessionService {
                         .setMediaMetadata(new MediaMetadata.Builder().setTitle(title).setArtist(bookTitle).setExtras(extras).build()).build());
                 }
                 boolean ended = player.getPlaybackState() == Player.STATE_ENDED;
+                boolean cold = player.getPlaybackState() == Player.STATE_IDLE || ended;
+                if (cold) {
+                    Bundle extras = new Bundle(); extras.putLong("durationMs", PlaybackWarmup.durationMs(outputSpeed));
+                    items.add(0, new MediaItem.Builder().setUri(Uri.fromFile(outputStart)).setMediaId("output-start")
+                        .setMediaMetadata(new MediaMetadata.Builder().setTitle(title).setArtist(bookTitle).setExtras(extras).build()).build());
+                    android.util.Log.i("ZijianTts", "Opening narration output before speech, recovery=" + ended);
+                }
                 int next = player.getMediaItemCount();
                 player.addMediaItems(items);
                 if (ended) player.seekTo(next, 0);
-                if (player.getPlaybackState() == Player.STATE_IDLE || ended) player.prepare();
+                if (cold) player.prepare();
                 preparation = "";
                 player.setPlayWhenReady(wantsPlayback); updateBuffer();
                 for (Ready ready : batch) pendingCache.remove(ready.clip.file.getName());
@@ -359,7 +368,9 @@ public final class BookPlaybackService extends MediaSessionService {
             android.util.Log.i("ZijianTts", "Generated " + clip.durationMs + "ms audio in " + clip.activeMs + "ms, voice="
                 + selectedVoice + ", ending=" + unit.ending + ", contextUnits=" + (context == null ? 0 : context.units)
                 + ", contextFrames=" + (context == null ? 0 : context.codes.size()) + ", edgeMs="
-                + clip.rawLeading / 48 + "/" + clip.rawTrailing / 48);
+                + clip.rawLeading / 48 + "/" + clip.rawTrailing / 48 + ", stagesMs="
+                + result.getPrefillMs() + "/" + result.getGenerationMs() + "/" + result.getCodecMs() + "/" + result.getVadMs()
+                + ", codecWarmFrames=" + result.getCodecWarmFrames());
         } finally {
             partial.delete(); partialCodes.delete();
             if (synthesisWake.isHeld()) synthesisWake.release();
