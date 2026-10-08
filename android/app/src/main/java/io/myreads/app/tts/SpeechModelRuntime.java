@@ -9,6 +9,9 @@ import java.util.concurrent.locks.ReentrantLock;
 
 /** One model for narration and UI speech. All tokenizer/ONNX access is serialized. */
 final class SpeechModelRuntime {
+    static final class RunawaySpeech extends IOException {
+        RunawaySpeech() { super("这段声音生成异常，请换一个声音后重试"); }
+    }
     private static final ReentrantLock lock = new ReentrantLock(true);
     private static final AtomicInteger guidance = new AtomicInteger();
     private static volatile MossOnnxDemoEngine engine;
@@ -72,11 +75,27 @@ final class SpeechModelRuntime {
         try {
             checkpoint.awaitReady(); load(context, true); checkpoint.awaitReady();
             engine.setCancelled(false);
-            int[] prompt = history == null ? null : engine.continuationPrompt(value -> tokenizer.tokenize(value), history.text, text);
-            return engine.synthesize(tokenizer.tokenize(text), output, voice, 375, 1234L, checkpoint,
-                previous == null ? null : previous.unit.ending,
-                previous == null ? 0 : previous.rawTrailing, previous == null ? 0 : previous.retainedTail,
-                prompt, history == null ? java.util.Collections.emptyList() : history.codes);
+            int[] prompt = history == null ? null : engine.continuationTextTokens(value -> tokenizer.tokenize(value), history.text, text);
+            int limit = SpeechQuality.frameLimit(text);
+            int[] textTokens = tokenizer.tokenize(text);
+            long[] seeds = {1234L, 56789L, 2026L};
+            long failedMs = 0;
+            for (int attempt = 0; attempt < seeds.length; attempt++) {
+                SynthesisResult result = engine.synthesize(textTokens, output, voice, limit, seeds[attempt], checkpoint,
+                    previous == null ? null : previous.unit.ending,
+                    previous == null ? 0 : previous.rawTrailing, previous == null ? 0 : previous.retainedTail,
+                    prompt, history == null ? java.util.Collections.emptyList() : history.codes);
+                if (result.getGeneratedFrames() > 0 && (limit == SpeechQuality.DEFAULT_FRAMES || result.getGeneratedFrames() < limit))
+                    return result.includeRetries(failedMs);
+                failedMs += result.getElapsedMs();
+                output.delete();
+                // The playback service owns history/cache provenance. Re-anchor
+                // there before retrying, so rejected codes never enter history.
+                if (history != null) throw new RunawaySpeech();
+                if (attempt + 1 < seeds.length)
+                    android.util.Log.i("ZijianTts", "Retrying incomplete or runaway utterance, seed=" + seeds[attempt + 1]);
+            }
+            throw new RunawaySpeech();
         } finally { lock.unlock(); }
     }
 }

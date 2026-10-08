@@ -45,6 +45,19 @@ public final class NarrationPlanner {
             quotes.clear();
             Boundary ending = boundary(original.substring(i, after));
             if (original.substring(i, after).matches("(?s).*[”’\"'』」].*")) {
+                int resumed = resumedDialogue(original, after);
+                if (resumed >= 0) {
+                    int endOfTurn = quotedEnd(original, resumed);
+                    if (endOfTurn >= 0 && fits(SpeechText.normalize(original.substring(start, endOfTurn)),
+                        tokens, MAX_TOKENS, MAX_SECONDS)) {
+                        // A comma-connected action between two quotations interrupts
+                        // one turn: keep the short opening, action and resumed speech.
+                        i = after - 1; continue;
+                    }
+                    // Even a long resumed turn should not leave its four-word
+                    // opening detached from the intervening speaker/action clause.
+                    after = resumed; ending = Boundary.CLAUSE;
+                }
                 Matcher attribution = ATTRIBUTION.matcher(original.substring(after));
                 if (attribution.find()) {
                     after += attribution.end();
@@ -75,6 +88,36 @@ public final class NarrationPlanner {
         if (!result.isEmpty()) result.set(result.size() - 1, result.get(result.size() - 1).ending(Boundary.PARAGRAPH));
         return result;
     }
+    private static int resumedDialogue(String text, int after) {
+        for (int i = after; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if ("。！？!?；;…\n".indexOf(c) >= 0 || sentencePeriod(text, i)) return -1;
+            if ("“「『‘\"'".indexOf(c) < 0 || contraction(text, i)) continue;
+            String bridge = text.substring(after, i).trim();
+            return !bridge.isEmpty() && "，,、".indexOf(bridge.charAt(bridge.length() - 1)) >= 0
+                && bridge.codePoints().anyMatch(Character::isLetterOrDigit) ? i : -1;
+        }
+        return -1;
+    }
+    private static int quotedEnd(String text, int start) {
+        Deque<Character> quotes = new ArrayDeque<>();
+        for (int i = start; i < text.length(); i++) {
+            char c = text.charAt(i);
+            if (contraction(text, i)) continue;
+            if (!quotes.isEmpty() && c == quotes.peek()) {
+                quotes.pop(); if (quotes.isEmpty()) return i + 1;
+            } else {
+                int opening = "“「『‘\"'".indexOf(c);
+                if (opening >= 0) quotes.push("”」』’\"'".charAt(opening));
+            }
+        }
+        return -1;
+    }
+    private static boolean contraction(String text, int i) {
+        return text.charAt(i) == '\'' && i > 0 && i + 1 < text.length()
+            && Character.UnicodeScript.of(text.charAt(i - 1)) == Character.UnicodeScript.LATIN
+            && Character.UnicodeScript.of(text.charAt(i + 1)) == Character.UnicodeScript.LATIN;
+    }
     private static boolean endsInLatin(String text) { return text.matches("(?s).*[A-Za-z][.!?]*$"); }
     static boolean sceneBreak(String text) {
         String compact = text.replaceAll("[\\s\\u3000]", "");
@@ -82,6 +125,8 @@ public final class NarrationPlanner {
     }
     private static void add(List<Unit> output, String raw, Boundary ending, TokenCounter tokens) {
         String text = SpeechText.normalize(raw);
+        if (ending == Boundary.CLAUSE && raw.matches("(?s).*[，,、][\\s\\u3000]*$"))
+            text += text.codePoints().anyMatch(c -> Character.UnicodeScript.of(c) == Character.UnicodeScript.HAN) ? "，" : ",";
         if (!text.codePoints().anyMatch(Character::isLetterOrDigit)) return;
         boolean dialogue = raw.matches("(?s).*[“”‘’「」『』\"'].*");
         split(output, text, ending, dialogue, tokens, MAX_TOKENS, MAX_SECONDS);

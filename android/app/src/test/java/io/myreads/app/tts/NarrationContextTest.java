@@ -75,15 +75,12 @@ public class NarrationContextTest {
         NarrationContext.Window differentText = new NarrationContext.Window("不同的前文。\n", stable.codes, stable.units);
         assertNotEquals(key, NarrationCache.key("model", "voice", target, a, differentText));
     }
-    @Test public void promptPlacesFullTranscriptInUserAndLeavesAudioStartOpenForPrefixCodes() {
-        int[] prompt = NarrationPrompt.continuation(value -> value.codePoints().toArray(),
-            "上一句。\n再上一句。\n", "当前句。", -1, -2, -3);
-        assertEquals(-1, prompt[0]); assertEquals(-3, prompt[prompt.length - 1]);
+    @Test public void transcriptContainsExactlyTheCompleteHistoryAndTarget() {
+        int[] prompt = NarrationPrompt.transcript(value -> value.codePoints().toArray(),
+            "上一句。\n再上一句。\n", "当前句。");
         StringBuilder printable = new StringBuilder();
         for (int id : prompt) if (id >= 0) printable.appendCodePoint(id);
-        assertTrue(printable.toString().contains("- Reference(s):\nNone"));
-        assertTrue(printable.toString().contains("- Text:\n上一句。\n再上一句。\n当前句。"));
-        assertTrue(printable.toString().endsWith("assistant\n"));
+        assertEquals("上一句。\n再上一句。\n当前句。", printable.toString());
     }
     @Test public void separateQuotedTurnsStaySeparateAndSceneMarkersAreRecognized() {
         List<NarrationPlanner.Unit> units = NarrationPlanner.paragraph("“你来了？”“我来了。”他放下行李。", tokens);

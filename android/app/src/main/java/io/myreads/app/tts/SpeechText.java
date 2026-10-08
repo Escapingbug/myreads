@@ -6,8 +6,8 @@ import java.util.*;
 import java.util.regex.*;
 
 final class SpeechText {
-    // Unchanged text still produces the same audio: retain those existing cache files.
-    static final String AUDIO_REVISION = "punctuation-v2";
+    // Include the short-utterance retry policy in UI speech cache provenance.
+    static final String AUDIO_REVISION = "short-utterance-v3";
     static final int TARGET_CHARACTERS = 48, MAX_CHARACTERS = 72;
     private static final String DIGITS = "零一二三四五六七八九";
     static String normalize(String input) {

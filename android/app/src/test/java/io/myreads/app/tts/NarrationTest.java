@@ -38,6 +38,26 @@ public class NarrationTest {
         assertTrue(units.get(0).dialogue); assertFalse(units.get(1).dialogue);
         assertEquals(PARAGRAPH, units.get(1).ending);
     }
+    @Test public void interruptedDialogueKeepsItsNamedActionAndResumedSpeechTogether() {
+        String text = "“我看着她！？”菲儿停止了假哭，朝艾登瞪大眼睛，“大人别开玩笑了，她不把我宰了就谢天谢地了，求您了还是给我换房间吧！”";
+        List<NarrationPlanner.Unit> units = NarrationPlanner.paragraph(text, counter);
+        assertEquals(1, units.size()); assertEquals(SpeechText.normalize(text), units.get(0).text);
+        assertTrue(units.get(0).dialogue); assertEquals(PARAGRAPH, units.get(0).ending);
+    }
+    @Test public void overBudgetInterruptedTurnKeepsItsOpeningWithTheActionClause() {
+        String text = "“等等！”菲儿抬起头，望向窗外，“" + "这一路的风雨我都还记得。".repeat(25) + "”";
+        List<NarrationPlanner.Unit> units = NarrationPlanner.paragraph(text, counter);
+        assertEquals("等等！菲儿抬起头，望向窗外，", units.get(0).text);
+        assertEquals(CLAUSE, units.get(0).ending); assertEquals(SpeechText.normalize(text), joined(units));
+        for (NarrationPlanner.Unit unit : units) assertTrue(counter.count(unit.text) <= 75);
+    }
+    @Test public void commaConnectedAttributionSupportsNestedAndAsciiQuotations() {
+        for (String text : List.of("“等等！”菲儿笑了笑，说道，“他刚才说‘别急。’我们再等一下。”",
+            "\"Wait!\" she said, \"I can't leave yet.\"")) {
+            List<NarrationPlanner.Unit> units = NarrationPlanner.paragraph(text, counter);
+            assertEquals(1, units.size()); assertEquals(SpeechText.normalize(text), joined(units));
+        }
+    }
     @Test public void longSentencePrefersClauseBoundariesAndPreservesTextOrder() {
         String text = "窗外的风声".repeat(9) + "，" + "旅人收起手中的信件".repeat(10) + "，他终于站了起来。";
         List<NarrationPlanner.Unit> units = NarrationPlanner.paragraph(text, counter);

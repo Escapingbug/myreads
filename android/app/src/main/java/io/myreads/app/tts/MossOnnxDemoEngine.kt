@@ -64,7 +64,7 @@ class MossOnnxDemoEngine(
         previousBoundary: NarrationPlanner.Boundary? = null,
         previousRawTail: Int = 0,
         previousRetainedTail: Int = 0,
-        continuationTokenIds: IntArray? = null,
+        continuationTextTokenIds: IntArray? = null,
         prefixAudioCodes: List<IntArray> = emptyList(),
     ): SynthesisResult {
         require(textTokenIds.isNotEmpty()) { "textTokenIds must not be empty" }
@@ -75,8 +75,8 @@ class MossOnnxDemoEngine(
             val before = System.nanoTime(); checkpoint.awaitReady(); waitedNanos += System.nanoTime() - before
         }
         activeCheckpoint.awaitReady()
-        val inputRows = if (continuationTokenIds == null) buildInputRows(textTokenIds, voice)
-            else buildContinuationRows(continuationTokenIds, prefixAudioCodes)
+        val inputRows = if (continuationTextTokenIds == null) buildInputRows(textTokenIds, voice)
+            else buildContinuationRows(continuationTextTokenIds, prefixAudioCodes, voice)
         val prefillResult = runPrefill(inputRows)
         val prefillMs = (System.nanoTime() - startedAt - waitedNanos) / 1000000
         var stageStart = System.nanoTime(); var stageWait = waitedNanos
@@ -112,16 +112,17 @@ class MossOnnxDemoEngine(
         )
     }
 
-    fun continuationPrompt(encoder: NarrationPrompt.Encoder, previous: String, target: String): IntArray {
-        val cfg = manifest.ttsConfig
-        return NarrationPrompt.continuation(encoder, previous, target,
-            cfg.imStartTokenId, cfg.imEndTokenId, cfg.audioStartTokenId)
+    fun continuationTextTokens(encoder: NarrationPrompt.Encoder, previous: String, target: String): IntArray {
+        return NarrationPrompt.transcript(encoder, previous, target)
     }
 
-    private fun buildContinuationRows(tokens: IntArray, codes: List<IntArray>): InputRows {
+    private fun buildContinuationRows(tokens: IntArray, codes: List<IntArray>, voice: String): InputRows {
         require(codes.isNotEmpty() && codes.size <= NarrationContext.MAX_FRAMES)
         val cfg = manifest.ttsConfig
-        val rows = buildTextRows(tokens, cfg, cfg.nVq + 1) +
+        // Keep the fixed user-side voice reference on every request. History
+        // remains assistant-side audio paired with the full previous/target text.
+        // The rolling window supplies context; it does not replace the voice anchor.
+        val rows = buildInputRows(tokens, voice).inputIds.toList() +
             buildAudioRows(codes, cfg, cfg.nVq + 1, cfg.audioAssistantSlotTokenId)
         return InputRows(rows.toTypedArray(), IntArray(rows.size) { 1 })
     }
@@ -476,7 +477,10 @@ data class SynthesisResult(
     val codecMs: Long = 0,
     val vadMs: Long = 0,
     val codecWarmFrames: Int = 0,
-)
+    val retryMs: Long = 0,
+) {
+    fun includeRetries(ms: Long): SynthesisResult = copy(elapsedMs = elapsedMs + ms, retryMs = ms)
+}
 
 private data class ModelManifest(
     val modelFiles: ModelFiles,

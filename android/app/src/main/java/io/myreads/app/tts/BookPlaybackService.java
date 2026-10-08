@@ -253,6 +253,12 @@ public final class BookPlaybackService extends MediaSessionService {
                         android.util.Log.i("ZijianTts", "Retrying capped sentence at a smaller semantic boundary");
                         continue;
                     }
+                    catch (SpeechModelRuntime.RunawaySpeech runaway) {
+                        if (context == null) throw runaway;
+                        history.clear(); units.addFirst(new Planned(planned.unit, planned.paragraph, true));
+                        android.util.Log.i("ZijianTts", "Re-anchoring abnormal short continuation before playback");
+                        continue;
+                    }
                     check(token);
                     if (continuous) history.accept(clip, context, counter);
                     previous = clip;
@@ -370,7 +376,7 @@ public final class BookPlaybackService extends MediaSessionService {
                 + ", contextFrames=" + (context == null ? 0 : context.codes.size()) + ", edgeMs="
                 + clip.rawLeading / 48 + "/" + clip.rawTrailing / 48 + ", stagesMs="
                 + result.getPrefillMs() + "/" + result.getGenerationMs() + "/" + result.getCodecMs() + "/" + result.getVadMs()
-                + ", codecWarmFrames=" + result.getCodecWarmFrames());
+                + ", codecWarmFrames=" + result.getCodecWarmFrames() + ", retryMs=" + result.getRetryMs());
         } finally {
             partial.delete(); partialCodes.delete();
             if (synthesisWake.isHeld()) synthesisWake.release();
