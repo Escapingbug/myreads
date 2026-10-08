@@ -12,7 +12,7 @@
 
 ## 当前完成状态
 
-阅读、听书、更新和语音无障碍模式已经实现，0.3.4 已由 GitHub Actions 签名公开发布。无障碍模式由他人协助首次配置，日常不依赖 TalkBack，进入前必须实际加载现有 MOSS 模型。听书沿用 0.3.3 的完整对白切分、统一官方声音参考、句首保护及确定结束判定。尚未在实体手机量化长篇听感、无障碍操作延迟或耗电。详见下文。
+阅读、听书、更新和语音无障碍模式已经实现，0.3.5 已由 GitHub Actions 签名公开发布。默认听书在首个语组完成后开始播放，旧自动设置迁移为边生成边播放。无障碍模式由他人协助首次配置，日常不依赖 TalkBack，进入前必须实际加载现有 MOSS 模型。听书沿用 0.3.3 的完整对白切分、统一官方声音参考、句首保护及确定结束判定。尚未在实体手机量化长篇听感、无障碍操作延迟或耗电。详见下文。
 
 - `src/App.vue`、`src/style.css`：移动端书架、继续阅读、搜索及分页、详情和完整目录预览、下载管理、ZIP/JSON/HTTPS 书源导入确认、启停与卸载、错误/空态、删除确认、原生返回键和应用生命周期。
 - `src/components/Reader.vue`：本地单章上下滚动、上下章、目录跳章、字号、行距、纸色/明亮/夜读、自动保存章节/段落/段内位置。未下载章节禁用。
@@ -25,11 +25,11 @@
 - `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.5 / versionCode 10，原生插件已同步。版本从 `package.json` 读取。
 - `scripts/build-android.mjs`：当前 Mac 使用已安装的 JDK 21 / SDK；若 shell 配置的是旧 JDK，会切换到 Homebrew JDK 21。
 
-发布 APK：`release/zijian-0.3.4.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
+发布 APK：`release/zijian-0.3.5.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
 
 ## 已完成的验证
 
-- `npm test`：8 个测试文件、42 项测试通过；Android 原生单元测试 45 项通过。覆盖无障碍模型加载、提示暂停与恢复、触摸确认、搜索取消和历史保留，以及已有更新、听书、书源、下载和持久化回归。
+- `npm test`：8 个测试文件、43 项测试通过；Android 原生单元测试 46 项通过。覆盖播放准备方式迁移、无障碍模型加载、提示暂停与恢复、触摸确认、搜索取消和历史保留，以及已有更新、听书、书源、下载和持久化回归。
 - `npm run build`：Vue / TypeScript 检查和 Vite 生产构建通过。
 - `npm run android:build`：JDK 21 / API 36 构建成功。
 - 浏览器 390 × 844：演示书源搜索、详情六章目录、整书下载、打开本地正文、切章、滚动；重载后仍有书籍与记录，第二章约 48% 位置恢复正确；ZIP 书源导入确认与更新成功。
@@ -222,3 +222,5 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - 合成单元、模型配置、官方声音参考及 `narration-fixed-voice-v2` 缓存键保持一致。整章总计算耗时没有被本轮调度修改加速；长段会拆成多个语组，因此缓冲也可能出现在段落内部的语组衔接处。没有测得用户手机的实际生成/播放比，不能仅凭整章生成分钟数判定持续生成速度慢于播放。
 - 43 项前端及 46 项原生测试通过，前端/Android 构建通过，lint 无错误。新增旧自动设置迁移及高耗时样本不触发整章准备的回归。API35 模拟器保留旧生成/播放比约 2.85，直接调用旧 `auto` 入口，43 个语组的章节在第 1 个语组完成时进入 playing，首段约 3 秒音频，证明没有整章或 10 秒音频门槛。该次冷启动约 28.8 秒，包括模型加载及 18.1 秒首语组合成，不能代表用户真机延迟；同一首段缓存回放约 1.1 秒进入 playing。测试后还原 chapter2/paragraph18 位置。
 - 发布版本为 0.3.5/code10，说明见 `docs/releases/0.3.5.md`，沿用用户授权的 GitHub 发布流程供继续测试。
+- 已公开发布：<https://github.com/Escapingbug/myreads/releases/tag/v0.3.5>。标签提交 `3b6b871f5f8bad712a70d8710aa360571220f025`；流水线 <https://github.com/Escapingbug/myreads/actions/runs/37752915843> 全部成功，89 项测试通过。实际线上 APK 58,844,083 bytes，SHA-256 `628f2415dd746a3969e05b634338f6f8b32a4f662f3f744c75abd280aedcce4c`；GitHub 资产摘要、update.json 与 SHA256SUMS 一致，签名仍与 0.3.4 相同，APK 无 DEBUGGABLE 标记、无模型权重。最新正式 Release API 已返回 0.3.5，`release/` 已同步线上资产。
+- 线上 APK 已覆盖安装到 API35 模拟器，版本 0.3.5/code10。升级前后书籍记录逐项一致，《山间来信》六章、chapter2/paragraph18 进度，以及 13 个模型文件和 `.ready` 标记保留。安装与验证材料在 `artifacts/accessibility/`。
