@@ -125,14 +125,20 @@ public class NarrationTest {
     }
     @Test public void bufferingUsesPlayableDurationAndGenerationSpeedRatherThanNumberOfClips() {
         NarrationBuffer buffer = new NarrationBuffer("auto", 0);
-        assertFalse(buffer.prepareChapter(1));
-        buffer.generated(18000, 6000); assertTrue(buffer.prepareChapter(1));
+        assertFalse(buffer.prepareChapter());
+        buffer.generated(18000, 6000); assertFalse(buffer.prepareChapter());
         double ratio = buffer.ratio(); buffer.generated(0, 6000); assertEquals(ratio, buffer.ratio(), 0);
-        assertFalse(buffer.start(19000, 2, false)); assertTrue(buffer.start(20000, 2, false));
-        assertTrue(buffer.start(2000, 2, true)); assertTrue(buffer.aheadMs(2) > buffer.aheadMs(1));
-        assertFalse(new NarrationBuffer("stream", 10).prepareChapter(1));
-        assertTrue(new NarrationBuffer("chapter", 0.1).prepareChapter(1));
-        assertTrue(new NarrationBuffer("auto", 0.6).prepareChapter(2));
+        assertTrue(buffer.aheadMs(2) > buffer.aheadMs(1));
+        assertFalse(new NarrationBuffer("stream", 10).prepareChapter());
+        assertTrue(new NarrationBuffer("chapter", 0.1).prepareChapter());
+        assertFalse(new NarrationBuffer("auto", 10).prepareChapter());
+    }
+    @Test public void explicitChapterPreparationSurvivesChangingGenerationSpeed() {
+        NarrationBuffer manual = new NarrationBuffer("chapter", 0);
+        manual.generated(500, 10000); assertTrue(manual.prepareChapter());
+        manual.generated(100000, 1000); assertTrue(manual.prepareChapter());
+        NarrationBuffer legacy = new NarrationBuffer("auto", 20);
+        legacy.generated(100000, 1000); assertFalse(legacy.prepareChapter());
     }
     private NarrationCache.Clip clip() throws IOException {
         File wav = folder.newFile(); Files.write(wav.toPath(), new byte[100]);

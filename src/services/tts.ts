@@ -12,7 +12,7 @@ export interface ModelStatus {
   file: string;
   error: string;
 }
-export type PreparationMode = "auto" | "stream" | "chapter";
+export type PreparationMode = "stream" | "chapter";
 export interface PlaybackStatus {
   phase: "idle" | "loading" | "buffering" | "playing" | "paused" | "completed" | "error";
   bookId?: string;
@@ -62,7 +62,7 @@ export const tts = reactive({
   voice: "Junhao",
   speed: 1,
   mirror: false,
-  mode: "auto" as PreparationMode,
+  mode: "stream" as PreparationMode,
   model: {
     id: catalog.id, phase: "missing", downloaded: 0,
     total: catalog.files.reduce((sum, file) => sum + file.size, 0), file: "", error: "",
@@ -99,7 +99,9 @@ export async function initializeTts() {
         if (voices.some((voice) => voice.id === values.voice)) tts.voice = values.voice;
         if (typeof values.speed === "number" && Number.isFinite(values.speed)) tts.speed = Math.max(0.5, Math.min(2, values.speed));
         tts.mirror = values.mirror === true;
-        if (["auto", "stream", "chapter"].includes(values.mode)) tts.mode = values.mode;
+        // Older automatic mode could wait for the entire chapter after one slow
+        // sample. Migrate it to immediate streaming; preserve explicit chapter mode.
+        if (["auto", "stream", "chapter"].includes(values.mode)) tts.mode = values.mode === "chapter" ? "chapter" : "stream";
       }
       if (tts.supported) {
         listeners.push(await native.addListener("modelState", (status) => { tts.model = status; }));
@@ -175,6 +177,6 @@ export function listeningMessage(status: PlaybackStatus = tts.playback): string 
     return `正在准备${chapter}${progress}，完成后开始播放`;
   }
   if (status.phase === "loading") return "正在加载声音…";
-  if (status.phase === "buffering") return "正在准备声音…";
+  if (status.phase === "buffering") return status.text ? "正在生成后续语音，完成后继续播放…" : "正在生成首段语音…";
   return status.chapterTitle || "";
 }

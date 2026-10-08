@@ -174,7 +174,7 @@ public final class BookPlaybackService extends MediaSessionService {
                 try { return SpeechModelRuntime.tokenize(this, value).length; }
                 catch (Exception failure) { throw new IllegalStateException(failure); }
             };
-            NarrationBuffer buffer = new NarrationBuffer(mode == null ? "auto" : mode,
+            NarrationBuffer buffer = new NarrationBuffer(mode == null ? "stream" : mode,
                 Double.longBitsToDouble(getSharedPreferences("tts-performance", MODE_PRIVATE).getLong("ratio", 0)));
             JSONObject metadata = new JSONObject(LocalTtsFiles.text(new File(getFilesDir(), "tts-books/" + activeBook + ".json")));
             JSONArray chapters = metadata.getJSONArray("chapters");
@@ -204,9 +204,8 @@ public final class BookPlaybackService extends MediaSessionService {
                     }
                 }
                 if (units.isEmpty()) throw new IOException("这一章没有可朗读的内容");
-                boolean wholeChapter = buffer.prepareChapter(speed), committed = false;
+                boolean wholeChapter = buffer.prepareChapter();
                 int done = 0, count = units.size();
-                long pendingMs = 0;
                 List<Ready> ready = new ArrayList<>();
                 preparing(token, title, wholeChapter, done, count);
                 while (!units.isEmpty()) {
@@ -236,12 +235,13 @@ public final class BookPlaybackService extends MediaSessionService {
                     buffer.generated(clip.activeMs, clip.durationMs);
                     if (clip.activeMs > 0) getSharedPreferences("tts-performance", MODE_PRIVATE).edit()
                         .putLong("ratio", Double.doubleToLongBits(buffer.ratio())).apply();
-                    if (!committed && buffer.prepareChapter(speed)) wholeChapter = true;
                     ready.add(new Ready(clip, planned.paragraph)); pendingCache.add(clip.file.getName());
-                    pendingMs += clip.durationMs; done++;
+                    done++;
                     preparing(token, title, wholeChapter, done, count);
-                    if (!wholeChapter && (committed || buffer.start(pendingMs, speed, units.isEmpty()))) {
-                        enqueue(token, ch, title, ready); ready.clear(); pendingMs = 0; committed = true;
+                    if (!wholeChapter) {
+                        // Queue the first complete phrase immediately, even if generation
+                        // is slow. Keep working ahead while audio plays; gaps may buffer.
+                        enqueue(token, ch, title, ready); ready.clear();
                     }
                 }
                 if (!ready.isEmpty()) enqueue(token, ch, title, ready);

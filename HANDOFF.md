@@ -22,7 +22,7 @@
 - `src/services/html.ts`：将 HTML 片段包在 body 中，修正 linkedom 对目录展开片段的不同处理，避免丢失中间章节。
 - `src/services/http.ts`、`dev-proxy.ts`：Android 原生 HTTP；开发期本机 HTTPS 代理，校验域名、DNS 公网 IP、固定已校验地址、请求/响应大小及超时。已修复 Node 26 的 DNS `lookup` 全量返回格式。
 - `src/services/packages.ts`、`import.ts`：书源包格式、域名与大小验证；ZIP/JSON 解码，HTTPS 下载包，安装前显示名称、版本和声明域名。
-- `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.4 / versionCode 9，原生插件已同步。版本从 `package.json` 读取。
+- `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.5 / versionCode 10，原生插件已同步。版本从 `package.json` 读取。
 - `scripts/build-android.mjs`：当前 Mac 使用已安装的 JDK 21 / SDK；若 shell 配置的是旧 JDK，会切换到 Homebrew JDK 21。
 
 发布 APK：`release/zijian-0.3.4.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
@@ -214,3 +214,11 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - 调试验证包：`artifacts/accessibility/zijian-accessibility-debug.apk`（功能开发时为 0.3.3/code8）。用户已明确要求直接发布供测试，发布版本递增为 0.3.4/code9，说明见 `docs/releases/0.3.4.md`；按已有标签流水线构建签名 APK 并发布更新清单。
 - 已公开发布：<https://github.com/Escapingbug/myreads/releases/tag/v0.3.4>。标签提交 `f43acc172279ae70a984de88854add2ea79838ec`；流水线 <https://github.com/Escapingbug/myreads/actions/runs/37747339444> 全部成功，87 项测试通过。线上 APK 为 58,844,039 bytes，SHA-256 `32aadb546c46ca2e3079b9bbfbe28dd1f910c2bc89692ff3836d9e015a3dadc5`；GitHub 资产摘要、update.json、SHA256SUMS 一致，`release/` 已同步实际线上资产。签名证书仍为 `a0abb5c432d5ada068efe059a63c1ec4adef40754a915559e0520538124c1112`；APK 不含模型权重，无 DEBUGGABLE 标记，应用使用的版本化 GitHub API 已返回 0.3.4 为最新正式版本。
 - 实际线上 APK 已覆盖安装至 API35 模拟器，安装版本 0.3.4/code9。升级前后 SQLite 书籍记录逐项一致，《山间来信》六章及 chapter2/paragraph18 阅读位置保留；13 个模型文件共 719,055,289 bytes 和 `.ready` 标记完整保留。正常书架界面已检查。验证材料在 `artifacts/accessibility/`（发布清单、签名/摘要核对、数据库快照、模型文件列表及 `release-shelf.png`），不提交。
+
+## 0.3.5 首播等待调整（2026-10-08）
+
+- 用户实测整章准备超过 10 分钟，明确接受句段衔接处必要的缓冲，优先开始播放。取消旧自动策略根据 `ratio × speed >= 0.9` 等待整章的行为，也取消起播前积累 10 秒音频的条件；每个完整语组合成或命中缓存后立即入播放队列，后台继续按音频时长预生成。
+- 前端默认 `stream`，旧 `auto` 设置读取时映射为 `stream`，原生入口也兼容旧 `auto`；显式 `chapter` 选择保留。设置页提供边生成边播放和先准备本章两项。速度统计只控制后续预生成量，不再控制整章等待；普通界面和无障碍模式共用此策略。
+- 合成单元、模型配置、官方声音参考及 `narration-fixed-voice-v2` 缓存键保持一致。整章总计算耗时没有被本轮调度修改加速；长段会拆成多个语组，因此缓冲也可能出现在段落内部的语组衔接处。没有测得用户手机的实际生成/播放比，不能仅凭整章生成分钟数判定持续生成速度慢于播放。
+- 43 项前端及 46 项原生测试通过，前端/Android 构建通过，lint 无错误。新增旧自动设置迁移及高耗时样本不触发整章准备的回归。API35 模拟器保留旧生成/播放比约 2.85，直接调用旧 `auto` 入口，43 个语组的章节在第 1 个语组完成时进入 playing，首段约 3 秒音频，证明没有整章或 10 秒音频门槛。该次冷启动约 28.8 秒，包括模型加载及 18.1 秒首语组合成，不能代表用户真机延迟；同一首段缓存回放约 1.1 秒进入 playing。测试后还原 chapter2/paragraph18 位置。
+- 发布版本为 0.3.5/code10，说明见 `docs/releases/0.3.5.md`，沿用用户授权的 GitHub 发布流程供继续测试。

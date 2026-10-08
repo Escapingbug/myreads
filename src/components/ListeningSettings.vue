@@ -59,12 +59,11 @@ const labels = { missing: "尚未下载", downloading: "正在下载", verifying
     <div class="listen-download-source">
       <label for="listen-mode">播放准备方式</label>
       <select id="listen-mode" v-model="tts.mode" @change="ttsAction(saveTtsOptions)">
-        <option value="auto">自动（生成较慢时先准备本章）</option>
-        <option value="stream">边生成边播放</option>
+        <option value="stream">边生成边播放（默认）</option>
         <option value="chapter">先准备本章</option>
       </select>
     </div>
-    <p class="muted">自动模式会根据手机的生成速度决定准备方式。先准备本章需要等待，但章内播放更连贯；设置在下次开始听书时生效。</p>
+    <p class="muted">默认在首个语组生成后开始播放，后台继续生成后续内容。生成暂时跟不上时会等待下一段；先准备本章需要等待整章生成完成。设置在下次开始听书时生效。</p>
   </section>
   <p v-if="tts.error" class="download-error" role="alert">{{ tts.error }}</p>
 </template>

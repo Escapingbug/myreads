@@ -46,7 +46,7 @@ describe("local listening", () => {
     const tts = await import("../src/services/tts");
     await tts.initializeTts(); await tts.startListening(book, 0, 7);
     expect(mocks.native.play).toHaveBeenCalledWith(expect.objectContaining({
-      bookId: "test-book", chapter: 0, paragraph: 7, mode: "auto",
+      bookId: "test-book", chapter: 0, paragraph: 7, mode: "stream",
       chapters: [{ id: "one", title: "第一章", downloaded: true }, { id: "two", title: "第二章", downloaded: false }],
     }));
   });
@@ -57,6 +57,13 @@ describe("local listening", () => {
     service.tts.mode = "stream"; await service.saveTtsOptions(); await service.startListening(book, 0, 0);
     expect(JSON.parse(mocks.preferences.set.mock.calls[0]![0].value).mode).toBe("stream");
     expect(mocks.native.play).toHaveBeenCalledWith(expect.objectContaining({ mode: "stream" }));
+  });
+  it("migrates saved automatic mode to streaming instead of waiting for a chapter", async () => {
+    mocks.preferences.get.mockResolvedValue({ value: JSON.stringify({ mode: "auto", voice: "Xiaoyu", speed: 2 }) });
+    const service = await import("../src/services/tts"); await service.initializeTts();
+    expect(service.tts.mode).toBe("stream");
+    await service.startListening(book, 0, 0);
+    expect(mocks.native.play).toHaveBeenCalledWith(expect.objectContaining({ mode: "stream", voice: "Xiaoyu", speed: 2 }));
   });
   it("preparing the next chapter does not advance the actual reading position", async () => {
     const service = await import("../src/services/tts"); await service.initializeTts();
@@ -70,6 +77,8 @@ describe("local listening", () => {
     const { listeningMessage } = await import("../src/services/tts");
     expect(listeningMessage({ phase: "buffering", preparation: "chapter", preparedUnits: 2, totalUnits: 8 })).toContain("2/8");
     expect(listeningMessage({ phase: "paused", preparation: "chapter", preparedUnits: 2, totalUnits: 8 })).toBe("听书已暂停");
+    expect(listeningMessage({ phase: "buffering" })).toContain("首段");
+    expect(listeningMessage({ phase: "buffering", text: "上一段正文" })).toContain("后续语音");
   });
   it("saves background listening position once and does not overwrite newer reading on restart", async () => {
     const tts = await import("../src/services/tts"); await tts.initializeTts();
