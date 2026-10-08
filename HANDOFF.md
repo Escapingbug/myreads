@@ -12,7 +12,7 @@
 
 ## 当前完成状态
 
-阅读、听书、更新和语音无障碍模式已经实现，0.3.5 已公开发布；0.3.6 的有界跨句续接已完成本机验证，准备发布。默认听书在首个语组完成后开始播放，旧自动设置迁移为边生成边播放。无障碍模式由他人协助首次配置，日常不依赖 TalkBack，进入前必须实际加载现有 MOSS 模型。0.3.6 默认使用完整语组文字与语音 token 的有界续接，可在听书页切换独立朗读；句首保护和确定结束判定保留。尚未在实体手机量化长篇听感、无障碍操作延迟或耗电。详见下文。
+阅读、听书、更新和语音无障碍模式已经实现，0.3.6 已由 GitHub Actions 签名公开发布，有界跨句续接已完成本机验证。默认听书在首个语组完成后开始播放，旧自动设置迁移为边生成边播放。无障碍模式由他人协助首次配置，日常不依赖 TalkBack，进入前必须实际加载现有 MOSS 模型。0.3.6 默认使用完整语组文字与语音 token 的有界续接，可在听书页切换独立朗读；句首保护和确定结束判定保留。尚未在实体手机量化长篇听感、无障碍操作延迟或耗电。详见下文。
 
 - `src/App.vue`、`src/style.css`：移动端书架、继续阅读、搜索及分页、详情和完整目录预览、下载管理、ZIP/JSON/HTTPS 书源导入确认、启停与卸载、错误/空态、删除确认、原生返回键和应用生命周期。
 - `src/components/Reader.vue`：本地单章上下滚动、上下章、目录跳章、字号、行距、纸色/明亮/夜读、自动保存章节/段落/段内位置。未下载章节禁用。
@@ -25,7 +25,7 @@
 - `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.6 / versionCode 11，原生插件已同步。版本从 `package.json` 读取。
 - `scripts/build-android.mjs`：当前 Mac 使用已安装的 JDK 21 / SDK；若 shell 配置的是旧 JDK，会切换到 Homebrew JDK 21。
 
-发布 APK：`release/zijian-0.3.5.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
+发布 APK：`release/zijian-0.3.6.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
 
 ## 已完成的验证
 
@@ -237,3 +237,5 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - 44 项前端、53 项原生测试通过，生产前端构建、Android assembleDebug 和 lintDebug 通过。覆盖完整窗口淘汰、跨普通段落、短历史积累、重锚定、缓存上下文隔离、对白分开、场景分隔和官方提示结构。
 - 实际 Android API35 样例九个单元完成，历史单元数 0/0/1/2/3/3/0/0/0；中间最大使用 134 帧完整前文，周期重锚定和场景 reset 生效，未触及 375 帧上限。输出 WAV 长度只包含目标帧及有界停顿，未含前文；ASR 未发现样例中的前文重复（含过去出现问题的“快进来吧”），有同音字／用字识别误差，不是人工听感评分。九单元相同请求缓存回放全部命中，首尾播放完成，无新生成日志。跳至段落 1 的首单元使用 contextUnits=0，并验证暂停／继续。
 - 本机记录在 artifacts/continuation-0.3.6/（不提交）：原始章节、Android WAV/codes 对照、ASR、状态、缓存、设置截图。真实手机重音／情绪、长时间漂移、耗电和实时速度仍由用户实听验证。模型清单及 13 文件不变，无需重下模型。
+
+- 0.3.6 已公开发布：<https://github.com/Escapingbug/myreads/releases/tag/v0.3.6>；源码标签 `fc1366044641ab6caeae77519c34b2bf7d4b72e7`；标签流水线 <https://github.com/Escapingbug/myreads/actions/runs/37767026731> 成功。APK 58,844,247 bytes，SHA-256 `07e26c041f7bdf0bd4fa9328ec3e7ea322082460754ba7857a5bd8a2c808f58e`，证书 SHA-256 `a0abb5c432d5ada068efe059a63c1ec4adef40754a915559e0520538124c1112` 与旧版一致。已核对 APK / update.json / SHA256SUMS / GitHub assets 摘要，正式且为 latest；APK 非调试、不含模型，包含新续接代码和选择器。实际公开 APK 已覆盖安装 API35 模拟器为 0.3.6 / code11，原书架及 chapter2 / paragraph18 保留，原 13 模型文件不变。独立朗读也完成同一样例九单元播放；临时测试章节已移除，原播放偏好恢复。
