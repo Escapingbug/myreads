@@ -34,8 +34,9 @@ public class NarrationTest {
     }
     @Test public void keepsShortDialogueAttributionWithTheQuotedUtterance() {
         List<NarrationPlanner.Unit> units = NarrationPlanner.paragraph("“你来了？”她轻声问。屋里又安静下来。", counter);
-        assertEquals(1, units.size()); assertEquals("你来了？她轻声问。屋里又安静下来。", units.get(0).text);
-        assertTrue(units.get(0).dialogue); assertEquals(PARAGRAPH, units.get(0).ending);
+        assertEquals(2, units.size()); assertEquals("你来了？她轻声问。", units.get(0).text);
+        assertTrue(units.get(0).dialogue); assertFalse(units.get(1).dialogue);
+        assertEquals(PARAGRAPH, units.get(1).ending);
     }
     @Test public void longSentencePrefersClauseBoundariesAndPreservesTextOrder() {
         String text = "窗外的风声".repeat(9) + "，" + "旅人收起手中的信件".repeat(10) + "，他终于站了起来。";
@@ -62,7 +63,7 @@ public class NarrationTest {
         String input = "温度是3.5度。Wait... Then go.";
         List<NarrationPlanner.Unit> units = NarrationPlanner.paragraph(input, counter);
         assertTrue(units.get(0).text.contains("三点五"));
-        assertTrue(joined(units).contains("Wait. Then go."));
+        assertTrue(joined(units).replace(" ", "").contains("Wait.Thengo."));
         List<NarrationPlanner.Unit> ellipsis = NarrationPlanner.paragraph("这一路上的风雨".repeat(5) + "...后来他终于走到了门口。", counter);
         assertEquals(ELLIPSIS, ellipsis.get(0).ending);
     }

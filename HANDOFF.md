@@ -12,7 +12,7 @@
 
 ## 当前完成状态
 
-阅读、听书、更新和语音无障碍模式已经实现，0.3.5 已由 GitHub Actions 签名公开发布。默认听书在首个语组完成后开始播放，旧自动设置迁移为边生成边播放。无障碍模式由他人协助首次配置，日常不依赖 TalkBack，进入前必须实际加载现有 MOSS 模型。听书沿用 0.3.3 的完整对白切分、统一官方声音参考、句首保护及确定结束判定。尚未在实体手机量化长篇听感、无障碍操作延迟或耗电。详见下文。
+阅读、听书、更新和语音无障碍模式已经实现，0.3.5 已公开发布；0.3.6 的有界跨句续接已完成本机验证，准备发布。默认听书在首个语组完成后开始播放，旧自动设置迁移为边生成边播放。无障碍模式由他人协助首次配置，日常不依赖 TalkBack，进入前必须实际加载现有 MOSS 模型。0.3.6 默认使用完整语组文字与语音 token 的有界续接，可在听书页切换独立朗读；句首保护和确定结束判定保留。尚未在实体手机量化长篇听感、无障碍操作延迟或耗电。详见下文。
 
 - `src/App.vue`、`src/style.css`：移动端书架、继续阅读、搜索及分页、详情和完整目录预览、下载管理、ZIP/JSON/HTTPS 书源导入确认、启停与卸载、错误/空态、删除确认、原生返回键和应用生命周期。
 - `src/components/Reader.vue`：本地单章上下滚动、上下章、目录跳章、字号、行距、纸色/明亮/夜读、自动保存章节/段落/段内位置。未下载章节禁用。
@@ -22,7 +22,7 @@
 - `src/services/html.ts`：将 HTML 片段包在 body 中，修正 linkedom 对目录展开片段的不同处理，避免丢失中间章节。
 - `src/services/http.ts`、`dev-proxy.ts`：Android 原生 HTTP；开发期本机 HTTPS 代理，校验域名、DNS 公网 IP、固定已校验地址、请求/响应大小及超时。已修复 Node 26 的 DNS `lookup` 全量返回格式。
 - `src/services/packages.ts`、`import.ts`：书源包格式、域名与大小验证；ZIP/JSON 解码，HTTPS 下载包，安装前显示名称、版本和声明域名。
-- `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.5 / versionCode 10，原生插件已同步。版本从 `package.json` 读取。
+- `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.6 / versionCode 11，原生插件已同步。版本从 `package.json` 读取。
 - `scripts/build-android.mjs`：当前 Mac 使用已安装的 JDK 21 / SDK；若 shell 配置的是旧 JDK，会切换到 Homebrew JDK 21。
 
 发布 APK：`release/zijian-0.3.5.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
@@ -224,3 +224,16 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - 发布版本为 0.3.5/code10，说明见 `docs/releases/0.3.5.md`，沿用用户授权的 GitHub 发布流程供继续测试。
 - 已公开发布：<https://github.com/Escapingbug/myreads/releases/tag/v0.3.5>。标签提交 `3b6b871f5f8bad712a70d8710aa360571220f025`；流水线 <https://github.com/Escapingbug/myreads/actions/runs/37752915843> 全部成功，89 项测试通过。实际线上 APK 58,844,083 bytes，SHA-256 `628f2415dd746a3969e05b634338f6f8b32a4f662f3f744c75abd280aedcce4c`；GitHub 资产摘要、update.json 与 SHA256SUMS 一致，签名仍与 0.3.4 相同，APK 无 DEBUGGABLE 标记、无模型权重。最新正式 Release API 已返回 0.3.5，`release/` 已同步线上资产。
 - 线上 APK 已覆盖安装到 API35 模拟器，版本 0.3.5/code10。升级前后书籍记录逐项一致，《山间来信》六章、chapter2/paragraph18 进度，以及 13 个模型文件和 `.ready` 标记保留。安装与验证材料在 `artifacts/accessibility/`。
+
+## 0.3.6 有界文字／语音续接（2026-10-08）
+
+用户明确授权实现完整语义单元与有界续接并直接发布，供实体手机实听。本次未改为句内 PCM 流式播放：仍在首个完整语组 WAV 完成后起播，默认不会等待整章。
+
+- 叙述在 75 文本 token / 估计 22 秒范围内尽量一起合成；完整对白及其常见叙述尾句保持一组，不再为满足最短时长合并不同对白或叙述。省略号的外部停顿边界保留。
+- `NarrationContext` 滚动保留至多三个完整生成单元，同时限制 150 文本 token / 300 音频帧（24 秒）；按完整单元淘汰，不截取不匹配的文字和尾音。普通段落间延续；标题、章节、空白／分隔标记、跳转及新播放会话清空；至多四次连续续接后重新使用官方音色参考。不足 25 帧的历史先积累，不立刻作为短前缀。参数是有界试用起点，不是经过主观评分证明的最佳窗口。
+- 按 Nano 官方 continuation 模板，将历史转录和目标文本放在 user、历史语音 codes 放入 assistant 的 slot 9。每次请求重置 codec，以 32 帧批次预热匹配前缀的有界解码状态，只输出当前新生成帧；不能把前文重复加入播放队列。正文与无障碍提示共享模型时，各请求独立初始化／清理 codec 状态。
+- 缓存 revision `narration-context-window-v3`，续接键包含全部历史转录及每帧 codes；缓存命中恢复 codes 和历史选择。达到生成帧上限的续接先从固定声音重试一次，仍触及上限才缩小当前未播放单元；失败结果不进入历史。
+- 新听书选项“跨句衔接”：默认连贯朗读；独立朗读不传历史，供同一文字／声音对照，停止后重新开始生效。保存到 tts-options，并随原生 play 请求传递。旧选项没有此字段时默认开启；原来的 auto 准备方式仍迁移为 stream。
+- 44 项前端、53 项原生测试通过，生产前端构建、Android assembleDebug 和 lintDebug 通过。覆盖完整窗口淘汰、跨普通段落、短历史积累、重锚定、缓存上下文隔离、对白分开、场景分隔和官方提示结构。
+- 实际 Android API35 样例九个单元完成，历史单元数 0/0/1/2/3/3/0/0/0；中间最大使用 134 帧完整前文，周期重锚定和场景 reset 生效，未触及 375 帧上限。输出 WAV 长度只包含目标帧及有界停顿，未含前文；ASR 未发现样例中的前文重复（含过去出现问题的“快进来吧”），有同音字／用字识别误差，不是人工听感评分。九单元相同请求缓存回放全部命中，首尾播放完成，无新生成日志。跳至段落 1 的首单元使用 contextUnits=0，并验证暂停／继续。
+- 本机记录在 artifacts/continuation-0.3.6/（不提交）：原始章节、Android WAV/codes 对照、ASR、状态、缓存、设置截图。真实手机重音／情绪、长时间漂移、耗电和实时速度仍由用户实听验证。模型清单及 13 文件不变，无需重下模型。

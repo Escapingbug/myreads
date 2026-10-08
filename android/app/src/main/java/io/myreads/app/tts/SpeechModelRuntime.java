@@ -63,13 +63,20 @@ final class SpeechModelRuntime {
     }
     static SynthesisResult synthesize(Context context, String text, File output, String voice,
                                       SynthesisCheckpoint checkpoint, NarrationCache.Clip previous) throws Exception {
+        return synthesize(context, text, output, voice, checkpoint, previous, null);
+    }
+    static SynthesisResult synthesize(Context context, String text, File output, String voice,
+                                      SynthesisCheckpoint checkpoint, NarrationCache.Clip previous,
+                                      NarrationContext.Window history) throws Exception {
         lock.lockInterruptibly();
         try {
             checkpoint.awaitReady(); load(context, true); checkpoint.awaitReady();
             engine.setCancelled(false);
+            int[] prompt = history == null ? null : engine.continuationPrompt(value -> tokenizer.tokenize(value), history.text, text);
             return engine.synthesize(tokenizer.tokenize(text), output, voice, 375, 1234L, checkpoint,
                 previous == null ? null : previous.unit.ending,
-                previous == null ? 0 : previous.rawTrailing, previous == null ? 0 : previous.retainedTail);
+                previous == null ? 0 : previous.rawTrailing, previous == null ? 0 : previous.retainedTail,
+                prompt, history == null ? java.util.Collections.emptyList() : history.codes);
         } finally { lock.unlock(); }
     }
 }

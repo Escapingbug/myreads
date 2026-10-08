@@ -7,7 +7,7 @@ import java.util.*;
 
 /** Cache WAV with its structural timing and generated-code provenance. */
 final class NarrationCache {
-    static final String REVISION = "narration-fixed-voice-v2";
+    static final String REVISION = "narration-context-window-v3";
     static final class Clip {
         final File file;
         final NarrationPlanner.Unit unit;
@@ -21,10 +21,20 @@ final class NarrationCache {
         }
     }
     static String key(String model, String voice, NarrationPlanner.Unit unit, Clip previous) throws Exception {
+        return key(model, voice, unit, previous, null);
+    }
+    static String key(String model, String voice, NarrationPlanner.Unit unit, Clip previous,
+                      NarrationContext.Window context) throws Exception {
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         digest.update((model + ":" + REVISION + ":" + voice + ":" + unit.ending + ":" + unit.text + "\0").getBytes(StandardCharsets.UTF_8));
         if (previous != null) {
             digest.update((previous.unit.ending + ":" + previous.rawTrailing + ":" + previous.retainedTail + "\0").getBytes(StandardCharsets.UTF_8));
+        }
+        if (context != null) {
+            digest.update(("continuation\0" + context.text + "\0").getBytes(StandardCharsets.UTF_8));
+            for (int[] row : context.codes) for (int code : row) {
+                digest.update((byte) (code >>> 8)); digest.update((byte) code);
+            }
         }
         StringBuilder name = new StringBuilder(); for (byte b : digest.digest()) name.append(String.format(Locale.ROOT, "%02x", b & 255));
         return name.toString();

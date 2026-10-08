@@ -17,7 +17,6 @@ public final class NarrationPlanner {
     }
     static final int MAX_TOKENS = 75;
     static final double MAX_SECONDS = 22;
-    static final double MIN_SECONDS = 6;
     private static final Pattern ATTRIBUTION = Pattern.compile(
         "^\\s*(?:他|她|我|老人|男人|女人|少年|女孩|男孩)[^。！？!?“「『\\n]{0,12}(?:说|问|答|道|喊|叫|回应|回答|低语)[。！？!?]");
 
@@ -56,15 +55,16 @@ public final class NarrationPlanner {
             start = after; i = after - 1;
         }
         if (start < original.length()) add(result, original.substring(start), Boundary.SENTENCE, tokens);
-        // Tiny standalone requests are a weak acoustic context. Keep their punctuation
-        // inside a bounded phrase so the model itself handles the internal rhythm.
+        // Read related narration together within the model budget. A complete quoted
+        // turn (with its attribution) is its own unit, regardless of its duration.
         List<Unit> grouped = new ArrayList<>();
         for (Unit unit : result) {
             if (!grouped.isEmpty()) {
                 Unit previous = grouped.get(grouped.size() - 1);
                 String together = previous.text + (endsInLatin(previous.text) ? " " : "") + unit.text;
-                if (seconds(previous.text) < MIN_SECONDS && previous.ending != Boundary.CONTINUATION
-                    && previous.ending != Boundary.CLAUSE && fits(together, tokens, MAX_TOKENS, MAX_SECONDS)) {
+                if (!previous.dialogue && !unit.dialogue && previous.ending != Boundary.CONTINUATION
+                    && previous.ending != Boundary.CLAUSE && previous.ending != Boundary.ELLIPSIS
+                    && fits(together, tokens, MAX_TOKENS, MAX_SECONDS)) {
                     grouped.set(grouped.size() - 1, new Unit(together, unit.ending, previous.dialogue || unit.dialogue));
                     continue;
                 }
@@ -76,6 +76,10 @@ public final class NarrationPlanner {
         return result;
     }
     private static boolean endsInLatin(String text) { return text.matches("(?s).*[A-Za-z][.!?]*$"); }
+    static boolean sceneBreak(String text) {
+        String compact = text.replaceAll("[\\s\\u3000]", "");
+        return compact.isEmpty() || compact.matches("[＊*＃#—–─━=_＝·•….。]{3,}");
+    }
     private static void add(List<Unit> output, String raw, Boundary ending, TokenCounter tokens) {
         String text = SpeechText.normalize(raw);
         if (!text.codePoints().anyMatch(Character::isLetterOrDigit)) return;

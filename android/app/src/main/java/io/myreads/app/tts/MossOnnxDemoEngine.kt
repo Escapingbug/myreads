@@ -64,6 +64,8 @@ class MossOnnxDemoEngine(
         previousBoundary: NarrationPlanner.Boundary? = null,
         previousRawTail: Int = 0,
         previousRetainedTail: Int = 0,
+        continuationTokenIds: IntArray? = null,
+        prefixAudioCodes: List<IntArray> = emptyList(),
     ): SynthesisResult {
         require(textTokenIds.isNotEmpty()) { "textTokenIds must not be empty" }
         val startedAt = System.nanoTime()
@@ -73,15 +75,16 @@ class MossOnnxDemoEngine(
             val before = System.nanoTime(); checkpoint.awaitReady(); waitedNanos += System.nanoTime() - before
         }
         activeCheckpoint.awaitReady()
-        // Use the same official voice reference for every complete phrase. Prior
-        // generated audio is not a reliable speaker/prosody prompt in this model.
-        val inputRows = buildInputRows(textTokenIds, voice)
+        val inputRows = if (continuationTokenIds == null) buildInputRows(textTokenIds, voice)
+            else buildContinuationRows(continuationTokenIds, prefixAudioCodes)
         val prefillResult = runPrefill(inputRows)
         val audioTokens = runDecode(prefillResult, maxFrames, seed, activeCheckpoint)
         if (audioTokens.size >= maxFrames || audioTokens.isEmpty())
             return SynthesisResult(outputFile, audioTokens.size, 48000, 0, (System.nanoTime() - startedAt - waitedNanos) / 1000000, audioTokens)
         activeCheckpoint.awaitReady()
-        val raw = codec.decode(audioTokens, activeCheckpoint)
+        // Prime a fresh codec with exactly the same prefix as the model. Prefix
+        // audio is discarded; only newly generated samples reach the WAV/player.
+        val raw = codec.decode(audioTokens, activeCheckpoint, prefixAudioCodes)
         activeCheckpoint.awaitReady()
         val bounds = speechEdges.detect(raw, activeCheckpoint)
         val rendered = NarrationTiming.render(raw, bounds[0], bounds[1], previousBoundary, previousRawTail, previousRetainedTail)
@@ -98,6 +101,20 @@ class MossOnnxDemoEngine(
             audioCodes = audioTokens,
             rawLeading = rendered.leading, rawTrailing = rendered.trailing, retainedTail = rendered.retainedTail,
         )
+    }
+
+    fun continuationPrompt(encoder: NarrationPrompt.Encoder, previous: String, target: String): IntArray {
+        val cfg = manifest.ttsConfig
+        return NarrationPrompt.continuation(encoder, previous, target,
+            cfg.imStartTokenId, cfg.imEndTokenId, cfg.audioStartTokenId)
+    }
+
+    private fun buildContinuationRows(tokens: IntArray, codes: List<IntArray>): InputRows {
+        require(codes.isNotEmpty() && codes.size <= NarrationContext.MAX_FRAMES)
+        val cfg = manifest.ttsConfig
+        val rows = buildTextRows(tokens, cfg, cfg.nVq + 1) +
+            buildAudioRows(codes, cfg, cfg.nVq + 1, cfg.audioAssistantSlotTokenId)
+        return InputRows(rows.toTypedArray(), IntArray(rows.size) { 1 })
     }
 
     override fun close() {

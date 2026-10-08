@@ -57,6 +57,14 @@ const labels = { missing: "尚未下载", downloading: "正在下载", verifying
     <div class="setting-row"><label for="listen-speed">播放速度</label><strong>{{ tts.speed.toFixed(2).replace(/0$/, '') }}×</strong></div>
     <input id="listen-speed" v-model.number="tts.speed" type="range" min="0.5" max="2" step="0.25" @change="ttsAction(saveTtsOptions)" />
     <div class="listen-download-source">
+      <label for="listen-continuity">跨句衔接</label>
+      <select id="listen-continuity" v-model="tts.continuity" @change="ttsAction(saveTtsOptions)">
+        <option :value="true">连贯朗读（默认）</option>
+        <option :value="false">独立朗读</option>
+      </select>
+    </div>
+    <p class="muted">连贯朗读参考前文的文字和声音；独立朗读每段重新使用所选声音。设置在下次开始听书时生效。</p>
+    <div class="listen-download-source">
       <label for="listen-mode">播放准备方式</label>
       <select id="listen-mode" v-model="tts.mode" @change="ttsAction(saveTtsOptions)">
         <option value="stream">边生成边播放（默认）</option>

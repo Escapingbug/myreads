@@ -46,7 +46,7 @@ describe("local listening", () => {
     const tts = await import("../src/services/tts");
     await tts.initializeTts(); await tts.startListening(book, 0, 7);
     expect(mocks.native.play).toHaveBeenCalledWith(expect.objectContaining({
-      bookId: "test-book", chapter: 0, paragraph: 7, mode: "stream",
+      bookId: "test-book", chapter: 0, paragraph: 7, mode: "stream", continuity: true,
       chapters: [{ id: "one", title: "第一章", downloaded: true }, { id: "two", title: "第二章", downloaded: false }],
     }));
   });
@@ -64,6 +64,15 @@ describe("local listening", () => {
     expect(service.tts.mode).toBe("stream");
     await service.startListening(book, 0, 0);
     expect(mocks.native.play).toHaveBeenCalledWith(expect.objectContaining({ mode: "stream", voice: "Xiaoyu", speed: 2 }));
+  });
+  it("restores and forwards independent narration for listening comparisons", async () => {
+    mocks.preferences.get.mockResolvedValue({ value: JSON.stringify({ continuity: false }) });
+    const service = await import("../src/services/tts"); await service.initializeTts();
+    expect(service.tts.continuity).toBe(false);
+    await service.startListening(book, 0, 0);
+    expect(mocks.native.play).toHaveBeenCalledWith(expect.objectContaining({ continuity: false }));
+    service.tts.continuity = true; await service.saveTtsOptions();
+    expect(JSON.parse(mocks.preferences.set.mock.calls[0]![0].value).continuity).toBe(true);
   });
   it("preparing the next chapter does not advance the actual reading position", async () => {
     const service = await import("../src/services/tts"); await service.initializeTts();

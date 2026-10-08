@@ -31,6 +31,7 @@ export interface PlaybackStatus {
   preparedUnits?: number;
   totalUnits?: number;
   bufferedSeconds?: number;
+  continuity?: boolean;
 }
 interface TtsPlugin {
   getStatus(): Promise<{ model: ModelStatus; playback: PlaybackStatus }>;
@@ -38,7 +39,7 @@ interface TtsPlugin {
   pauseDownload(): Promise<void>;
   removeModel(): Promise<void>;
   play(options: {
-    bookId: string; title: string; chapter: number; paragraph: number; voice: string; speed: number; mode: PreparationMode;
+    bookId: string; title: string; chapter: number; paragraph: number; voice: string; speed: number; mode: PreparationMode; continuity: boolean;
     chapters: { id: string; title: string; downloaded: boolean }[];
   }): Promise<void>;
   control(options: { action: "pause" | "resume" | "stop" | "speed" | "pauseForPrompt" | "resumeAfterPrompt"; speed?: number; bookId?: string; intent?: number }): Promise<unknown>;
@@ -63,6 +64,7 @@ export const tts = reactive({
   speed: 1,
   mirror: false,
   mode: "stream" as PreparationMode,
+  continuity: true,
   model: {
     id: catalog.id, phase: "missing", downloaded: 0,
     total: catalog.files.reduce((sum, file) => sum + file.size, 0), file: "", error: "",
@@ -99,6 +101,7 @@ export async function initializeTts() {
         if (voices.some((voice) => voice.id === values.voice)) tts.voice = values.voice;
         if (typeof values.speed === "number" && Number.isFinite(values.speed)) tts.speed = Math.max(0.5, Math.min(2, values.speed));
         tts.mirror = values.mirror === true;
+        tts.continuity = values.continuity !== false;
         // Older automatic mode could wait for the entire chapter after one slow
         // sample. Migrate it to immediate streaming; preserve explicit chapter mode.
         if (["auto", "stream", "chapter"].includes(values.mode)) tts.mode = values.mode === "chapter" ? "chapter" : "stream";
@@ -125,7 +128,7 @@ export async function refreshTts() {
 }
 export async function saveTtsOptions() {
   const { Preferences } = await import("@capacitor/preferences");
-  await Preferences.set({ key: "tts-options", value: JSON.stringify({ voice: tts.voice, speed: tts.speed, mirror: tts.mirror, mode: tts.mode }) });
+  await Preferences.set({ key: "tts-options", value: JSON.stringify({ voice: tts.voice, speed: tts.speed, mirror: tts.mirror, mode: tts.mode, continuity: tts.continuity }) });
   if (tts.supported && tts.playback.phase !== "idle") await native.control({ action: "speed", speed: tts.speed });
 }
 export async function ttsAction(action: () => Promise<unknown>) {
@@ -148,7 +151,7 @@ export async function startListening(book: Book, chapter: number, paragraph: num
   progressKey = "";
   await native.play({
     bookId: book.localId, title: book.title, chapter, paragraph,
-    voice: tts.voice, speed: tts.speed, mode: tts.mode,
+    voice: tts.voice, speed: tts.speed, mode: tts.mode, continuity: tts.continuity,
     chapters: book.chapters.map((item) => ({ id: item.id, title: item.title, downloaded: book.downloaded.includes(item.id) })),
   });
 }
