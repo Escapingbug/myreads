@@ -46,6 +46,7 @@ const panel = ref<"toc" | "settings" | "listen" | null>(null);
 const panelNames = { toc: "章节目录", settings: "阅读设置", listen: "听书" };
 const listening = computed(() => tts.playback.bookId === props.book.localId && !["idle", "completed", "error"].includes(tts.playback.phase));
 const scrollRoot = ref<HTMLElement>();
+const tocList = ref<HTMLElement>();
 const percent = ref(0);
 const chapter = computed(() => props.book.chapters[index.value]);
 const settings = computed(() => state.settings);
@@ -201,6 +202,13 @@ async function listenHere() {
   await startListening(props.book, index.value, position.paragraph);
   panel.value = null;
 }
+watch(panel, (value) => {
+  if (value !== "toc") return;
+  const list = tocList.value;
+  const current = list?.querySelector<HTMLElement>("button.active");
+  if (list && current)
+    list.scrollTop += current.getBoundingClientRect().top - list.getBoundingClientRect().top;
+}, { flush: "post" });
 watch(() => [tts.playback.bookId, tts.playback.chapter, tts.playback.paragraph], async () => {
   if (!listening.value || loading.value) return;
   const target = tts.playback.chapter ?? index.value;
@@ -401,7 +409,7 @@ onBeforeUnmount(() => {
           </div>
           <ListeningSettings />
         </template>
-        <div v-else class="toc-list">
+        <div v-else ref="tocList" class="toc-list">
           <button
             v-for="(item, i) in book.chapters"
             :key="item.id"

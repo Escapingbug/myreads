@@ -2,7 +2,7 @@
 
 Android 小说阅读器，支持动态书源、搜索、章节下载、离线阅读和本地听书。
 
-[下载最新 APK](https://github.com/escapingbug/myreads/releases/latest) · [版本说明](docs/releases/0.3.8.md)
+[下载最新 APK](https://github.com/escapingbug/myreads/releases/latest) · [版本说明](docs/releases/0.3.9.md)
 
 ## 使用
 
