@@ -1,6 +1,6 @@
 # 纸间 Android 小说阅读器：项目交接
 
-更新时间：2026-10-08
+更新时间：2026-10-09
 
 ## 用户目标与范围
 
@@ -12,7 +12,7 @@
 
 ## 当前完成状态
 
-阅读、听书、更新和语音无障碍模式已经实现，0.3.8 已由 GitHub Actions 签名公开发布，中断对白分组、固定参考续接及异常短句重试已完成本机验证。默认听书在首个语组完成后开始播放，旧自动设置迁移为边生成边播放。无障碍模式由他人协助首次配置，日常不依赖 TalkBack，进入前必须实际加载现有 MOSS 模型。0.3.6 默认使用完整语组文字与语音 token 的有界续接，可在听书页切换独立朗读；句首保护和确定结束判定保留。尚未在实体手机量化长篇听感、无障碍操作延迟或耗电。详见下文。
+阅读、听书、更新和语音无障碍模式已经实现，0.3.9 已由 GitHub Actions 签名公开发布，目录打开时自动定位当前阅读／播放章节。此前的中断对白分组、固定参考续接及异常短句重试已完成本机验证。默认听书在首个语组完成后开始播放，旧自动设置迁移为边生成边播放。无障碍模式由他人协助首次配置，日常不依赖 TalkBack，进入前必须实际加载现有 MOSS 模型。0.3.6 默认使用完整语组文字与语音 token 的有界续接，可在听书页切换独立朗读；句首保护和确定结束判定保留。尚未在实体手机量化长篇听感、无障碍操作延迟或耗电。详见下文。
 
 - `src/App.vue`、`src/style.css`：移动端书架、继续阅读、搜索及分页、详情和完整目录预览、下载管理、ZIP/JSON/HTTPS 书源导入确认、启停与卸载、错误/空态、删除确认、原生返回键和应用生命周期。
 - `src/components/Reader.vue`：本地单章上下滚动、上下章、目录跳章、字号、行距、纸色/明亮/夜读、自动保存章节/段落/段内位置。未下载章节禁用。
@@ -22,10 +22,10 @@
 - `src/services/html.ts`：将 HTML 片段包在 body 中，修正 linkedom 对目录展开片段的不同处理，避免丢失中间章节。
 - `src/services/http.ts`、`dev-proxy.ts`：Android 原生 HTTP；开发期本机 HTTPS 代理，校验域名、DNS 公网 IP、固定已校验地址、请求/响应大小及超时。已修复 Node 26 的 DNS `lookup` 全量返回格式。
 - `src/services/packages.ts`、`import.ts`：书源包格式、域名与大小验证；ZIP/JSON 解码，HTTPS 下载包，安装前显示名称、版本和声明域名。
-- `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.8 / versionCode 13，原生插件已同步。版本从 `package.json` 读取。
+- `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.9 / versionCode 14，原生插件已同步。版本从 `package.json` 读取。
 - `scripts/build-android.mjs`：当前 Mac 使用已安装的 JDK 21 / SDK；若 shell 配置的是旧 JDK，会切换到 Homebrew JDK 21。
 
-发布 APK：`release/zijian-0.3.8.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
+发布 APK：`release/zijian-0.3.9.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
 
 ## 已完成的验证
 
@@ -272,3 +272,14 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 记录在 `artifacts/feedback-0.3.7/`（不提交）。版本 0.3.8 / code13。实际手机的语速稳定性、吞字与“呵”等感叹词仍需要用户试听，不能宣称所有语句都已修复。
 
 - 0.3.8 已公开为 latest：<https://github.com/Escapingbug/myreads/releases/tag/v0.3.8>，源码 `f52cc8037636cd44e2353497d80fa72dca34f9f9`，流水线 <https://github.com/Escapingbug/myreads/actions/runs/37789995653> 第 2 次执行成功（第一次仅发布任务的 NDK 下载 ZIP 损坏，验证任务通过）。APK 58,844,243 bytes，SHA-256 `ca51e571e5e3646df3987e2debf70382835fbc6ebfd9eb65a18ea1d3f740fc02`，签名与旧版一致。APK / update.json / SHA256SUMS / GitHub assets 摘要一致；非调试、不含模型，已确认新提示方法、SpeechQuality 和两项缓存 revision 进入 Dex。正式 APK 已覆盖安装 API35 为 0.3.8 / code13；原数据库 7 条记录逐值一致，原 chapter2 / paragraph18、13 个模型文件保留，书架正常。临时章节和六个生成缓存清理，原播放／性能偏好恢复。最后一次原生检查的短句主动耗时 31,663ms，包含 26,612ms 失败重试；最终可播原始语音仍只有 14 帧 / 1.12 秒。
+
+
+## 0.3.9 目录定位（2026-10-09）
+
+用户反馈听书时打开目录仍从第一章显示，需要手动翻找附近章节。
+
+- `Reader.vue` 为目录列表增加模板引用，在目录面板渲染完成后，根据当前高亮章节与列表的实际位置设置列表滚动位置。每次打开重新定位，普通阅读与听书共用当前章节；靠近末尾时由浏览器限制滚动范围。正文滚动和未下载章节禁用规则保持不变。
+- 版本 0.3.9 / code14，说明见 `docs/releases/0.3.9.md`。用户明确要求发布，源码标签提交 `5bb9de0d4b60ed41d9259e2ab0747040e0ba71d9`。
+- 已公开发布为 latest：<https://github.com/Escapingbug/myreads/releases/tag/v0.3.9>；标签流水线 <https://github.com/Escapingbug/myreads/actions/runs/37889025622> 全部成功。44 项前端测试、前端生产构建、Android 原生测试和 APK 构建通过。
+- 实际线上 APK 58,844,331 bytes，SHA-256 `0b628bd0b487e6d2f132a713b75fd9176065ca6e355d388a8e96bb2224057c33`；APK / update.json / SHA256SUMS / GitHub assets 摘要一致。签名验证通过，证书 SHA-256 仍为 `a0abb5c432d5ada068efe059a63c1ec4adef40754a915559e0520538124c1112`；包名和版本正确、非调试、不含模型权重，编译后的前端资产包含新目录定位逻辑。
+- 未认证公开最新正式 Release API 已返回 v0.3.9。`release/` 已同步实际发布资产，核对记录在 `artifacts/release-0.3.9-verification.json` 等文件。本轮未覆盖安装模拟器，未完成目录滚动的浏览器或实体手机视觉验证；本机浏览器自动化连接不可用。
