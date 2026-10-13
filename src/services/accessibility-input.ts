@@ -1,44 +1,56 @@
-/** Touch exploration is separate from activation. A second tap anywhere confirms
- * the previous selection, rather than changing it under the second finger. */
-export class ExplorationController {
-  selected = "";
-  private lastTap = 0;
-  private confirming = false;
+const HOLD_MS = 600;
+const MOVE_SLOP = 16;
+const SWIPE_DISTANCE = 64;
+
+/** Short taps execute on release; holding explains without executing. Movement
+ * cancels the tap and may become one horizontal previous/next gesture. */
+export class DirectGestureController {
+  private active = false;
   private moved = false;
   private held = false;
   private candidate = "";
-  private deferred = false;
+  private started = 0;
   private timer?: ReturnType<typeof setTimeout>;
   private origin = { x: 0, y: 0 };
-  constructor(private describe: (id: string) => void, private activate: (id: string) => void) {}
-  reset() { this.clearTimer(); this.selected = ""; this.lastTap = 0; this.confirming = false; }
+  constructor(
+    private describe: (id: string) => void,
+    private activate: (id: string) => void,
+    private swipe: (delta: -1 | 1) => void,
+  ) {}
+  reset() {
+    this.clearTimer(); this.active = false; this.candidate = "";
+    this.held = false; this.moved = false;
+  }
   down(id: string, x: number, y: number, now: number) {
-    this.clearTimer(); this.origin = { x, y }; this.moved = false; this.held = false; this.candidate = id;
-    this.confirming = this.lastTap > 0 && now - this.lastTap <= 400 && !!this.selected;
-    this.deferred = !!this.selected;
-    if (this.confirming) return;
-    if (!this.selected) this.select(id);
-    else this.timer = setTimeout(() => { this.held = true; this.select(id, true); }, 400);
+    this.reset(); this.active = true; this.candidate = id;
+    this.origin = { x, y }; this.started = now;
+    this.timer = setTimeout(() => {
+      if (this.active && !this.moved) {
+        this.held = true;
+        if (this.candidate) this.describe(this.candidate);
+      }
+    }, HOLD_MS);
   }
-  move(id: string, x: number, y: number) {
-    if (Math.hypot(x - this.origin.x, y - this.origin.y) > 12) this.moved = true;
-    if (!this.confirming && this.moved) { this.clearTimer(); this.select(id); }
-  }
-  up(now: number) {
-    this.clearTimer();
-    if (this.moved || this.held) { this.lastTap = 0; this.confirming = false; return; }
-    if (this.confirming && this.selected) {
-      const id = this.selected; this.lastTap = 0; this.confirming = false; this.activate(id);
-    } else {
-      this.lastTap = now;
-      // Wait for the second tap before changing a pre-existing selection. This
-      // also preserves the explored target when both confirmation taps land elsewhere.
-      if (this.deferred) this.timer = setTimeout(() => this.select(this.candidate, true), 400);
+  move(x: number, y: number) {
+    if (this.active && Math.hypot(x - this.origin.x, y - this.origin.y) > MOVE_SLOP) {
+      this.moved = true; this.clearTimer();
     }
   }
-  private clearTimer() { if (this.timer) clearTimeout(this.timer); this.timer = undefined; }
-  private select(id: string, repeat = false) {
-    if (!id || id === this.selected && !repeat) return;
-    this.selected = id; this.describe(id);
+  up(id: string, x: number, y: number, now: number) {
+    if (!this.active) return;
+    this.move(x, y);
+    const candidate = this.candidate, held = this.held, moved = this.moved;
+    const elapsed = now - this.started, dx = x - this.origin.x, dy = y - this.origin.y;
+    this.reset();
+    if (held) return;
+    if (moved) {
+      if (Math.abs(dx) >= SWIPE_DISTANCE && Math.abs(dx) >= Math.abs(dy) * 1.5) this.swipe(dx < 0 ? 1 : -1);
+      return;
+    }
+    if (!candidate || id !== candidate) return;
+    // A busy UI thread may deliver pointerup before the long-press timer runs.
+    if (elapsed >= HOLD_MS) this.describe(candidate);
+    else this.activate(candidate);
   }
+  private clearTimer() { if (this.timer !== undefined) clearTimeout(this.timer); this.timer = undefined; }
 }

@@ -1,39 +1,56 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ExplorationController } from "../src/services/accessibility-input";
+import { DirectGestureController } from "../src/services/accessibility-input";
 
-describe("无视觉触摸确认", () => {
+describe("无障碍单击、长按与滑动", () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
-  it("探索不会执行，第二次点按别处仍确认之前选中的功能", () => {
+  it("单击松手即执行，不先播报，也不复用前一个按钮", () => {
     const speak = vi.fn(), activate = vi.fn();
-    const input = new ExplorationController(speak, activate);
-    input.down("shelf", 20, 20, 1000); input.up(1050);
-    expect(speak).toHaveBeenCalledWith("shelf"); expect(activate).not.toHaveBeenCalled();
-    input.down("exit", 200, 300, 1200); input.up(1250);
-    expect(activate).toHaveBeenCalledExactlyOnceWith("shelf");
-    expect(speak).not.toHaveBeenCalledWith("exit");
-  });
-  it("拖动探索与超时的新点按不构成确认", () => {
-    const activate = vi.fn(); const input = new ExplorationController(vi.fn(), activate);
-    input.down("shelf", 0, 0, 1000); input.move("history", 50, 50); input.up(1050);
-    input.down("history", 50, 50, 1100); input.up(1150);
-    input.down("find", 50, 50, 2000); input.up(2050);
-    vi.advanceTimersByTime(401);
-    expect(activate).not.toHaveBeenCalled(); expect(input.selected).toBe("find");
-  });
-  it("拖动选中后，两个确认点都落在别处仍执行原来的选择", () => {
-    const speak = vi.fn(), activate = vi.fn(); const input = new ExplorationController(speak, activate);
-    input.down("shelf", 0, 0, 1000); input.move("history", 50, 50); input.up(1100);
-    input.down("exit", 200, 200, 1500); input.up(1550);
-    input.down("find", 300, 300, 1700); input.up(1750);
-    vi.advanceTimersByTime(500);
-    expect(activate).toHaveBeenCalledExactlyOnceWith("history");
-    expect(speak).not.toHaveBeenCalledWith("exit"); expect(speak).not.toHaveBeenCalledWith("find");
-  });
-  it("切换页面后无法双击执行上一页的选择", () => {
-    const activate = vi.fn(); const input = new ExplorationController(vi.fn(), activate);
-    input.down("next", 0, 0, 1000); input.up(1050); input.reset();
-    input.down("back", 0, 0, 1100); input.up(1150);
+    const input = new DirectGestureController(speak, activate, vi.fn());
+    input.down("shelf", 20, 20, 1000);
     expect(activate).not.toHaveBeenCalled();
+    input.up("shelf", 20, 20, 1050);
+    input.down("exit", 200, 300, 1200); input.up("exit", 200, 300, 1250);
+    expect(activate.mock.calls).toEqual([["shelf"], ["exit"]]);
+    expect(speak).not.toHaveBeenCalled();
+  });
+  it("长按只说明一次，松手或随后移动都不执行", () => {
+    const speak = vi.fn(), activate = vi.fn(), swipe = vi.fn();
+    const input = new DirectGestureController(speak, activate, swipe);
+    input.down("shelf", 200, 100, 1000);
+    vi.advanceTimersByTime(1600);
+    expect(speak).toHaveBeenCalledExactlyOnceWith("shelf");
+    input.move(50, 100); input.up("find", 50, 100, 2700);
+    expect(activate).not.toHaveBeenCalled(); expect(swipe).not.toHaveBeenCalled();
+  });
+  it("计时器被阻塞时，长按松手也不会变成单击", () => {
+    const speak = vi.fn(), activate = vi.fn(); const input = new DirectGestureController(speak, activate, vi.fn());
+    input.down("exit", 0, 0, 1000); input.up("exit", 0, 0, 1800);
+    vi.advanceTimersByTime(1000);
+    expect(speak).toHaveBeenCalledExactlyOnceWith("exit"); expect(activate).not.toHaveBeenCalled();
+  });
+  it("左滑下一项、右滑上一项，每次松手仅切换一次且不会点击途经按钮", () => {
+    const speak = vi.fn(), activate = vi.fn(), swipe = vi.fn(); const input = new DirectGestureController(speak, activate, swipe);
+    input.down("choose", 240, 100, 1000); input.move(150, 110); input.move(80, 115);
+    expect(swipe).not.toHaveBeenCalled();
+    input.up("exit", 60, 115, 1300); input.up("exit", 60, 115, 1350);
+    input.down("", 60, 100, 2000); input.up("choose", 200, 105, 2300);
+    expect(swipe.mock.calls).toEqual([[1], [-1]]);
+    vi.advanceTimersByTime(1000);
+    expect(activate).not.toHaveBeenCalled(); expect(speak).not.toHaveBeenCalled();
+  });
+  it("竖向滚动、短拖动、移出按钮均不会执行", () => {
+    const activate = vi.fn(), swipe = vi.fn(); const input = new DirectGestureController(vi.fn(), activate, swipe);
+    input.down("choose", 0, 0, 1000); input.up("choose", 30, 140, 1300);
+    input.down("choose", 0, 0, 2000); input.up("choose", 30, 0, 2300);
+    input.down("choose", 0, 0, 3000); input.up("", 4, 0, 3300);
+    input.down("choose", 0, 0, 4000); input.move(30, 0); input.up("choose", 0, 0, 4300);
+    expect(activate).not.toHaveBeenCalled(); expect(swipe).not.toHaveBeenCalled();
+  });
+  it("切页或系统取消触摸后不执行也不继续播报", () => {
+    const speak = vi.fn(), activate = vi.fn(), swipe = vi.fn(); const input = new DirectGestureController(speak, activate, swipe);
+    input.down("exit", 0, 0, 1000); input.reset(); input.up("exit", 0, 0, 1200);
+    vi.advanceTimersByTime(1000);
+    expect(activate).not.toHaveBeenCalled(); expect(speak).not.toHaveBeenCalled(); expect(swipe).not.toHaveBeenCalled();
   });
 });

@@ -6,7 +6,7 @@ import { storage } from "../services/storage";
 import { SourceRuntime } from "../services/runtime";
 import { tts, startListening, controlListening, saveTtsOptions, listeningMessage } from "../services/tts";
 import { accessibility, announce, cancelAnnouncements, recognizeSearch, cancelRecognition, rememberSearch, disableAccessibility } from "../services/accessibility";
-import { ExplorationController } from "../services/accessibility-input";
+import { DirectGestureController } from "../services/accessibility-input";
 
 type Screen = "home" | "books" | "find" | "query" | "searches" | "player" | "more" | "chapters" | "speed" | "exit" | "help";
 interface Entry { book: SourceBook; sourceId: string; history?: ReadingHistory }
@@ -34,8 +34,8 @@ const summary = computed(() => {
   if (screen.value === "searches") return accessibility.searches.length ? `第${searchIndex.value + 1}项，共${accessibility.searches.length}项。${accessibility.searches[searchIndex.value]}` : "还没有搜索记录";
   if (screen.value === "chapters") return chapter.value ? `第${chapterIndex.value + 1}章。${chapter.value.title}。${localBook.value?.downloaded.includes(chapter.value.id) ? "已下载" : "尚未下载"}` : "没有可用章节";
   if (screen.value === "speed") return `当前语速 ${tts.speed} 倍。`;
-  if (screen.value === "help") return "移动手指听按钮名称，抬手选中，任意位置双击执行。左下角返回，右下角帮助。";
-  return "确认退出后恢复普通界面。下次仍可由协助者在设置中开启。";
+  if (screen.value === "help") return "单击按钮直接执行，长按听说明，松手不会执行。书籍列表左滑下一本，右滑上一本；播放页左右滑动换段。左下角返回，右下角帮助，右上角退出无障碍模式。";
+  return "单击确认退出后恢复普通界面，书籍和阅读进度保留。下次仍可由协助者在设置中开启。";
 });
 const primaryLabel = computed(() => {
   if (!item.value) return "重听当前状态";
@@ -47,8 +47,21 @@ const primaryLabel = computed(() => {
 });
 let runtime: SourceRuntime | undefined, controller: AbortController | undefined, nextCursor: string | undefined;
 let operation = 0;
-let touchInput = false, pauseOnToggle: boolean | undefined;
-let helpReturn: Screen = "home";
+let touchInput = false, pointerId: number | undefined, pauseOnToggle: boolean | undefined;
+let helpReturn: Screen = "home", exitReturn: Screen = "home";
+const screenInstructions = computed(() => {
+  if (screen.value === "home") return "中间继续上次，下方左侧最近读听、右侧书架，再下方找新书。单击执行，长按听说明。";
+  if (screen.value === "books") return `左滑下一本，右滑上一本。单击中间${primaryLabel.value}，长按听简介。`;
+  if (screen.value === "searches") return "左右滑动切换搜索记录，单击中间使用当前搜索。";
+  if (screen.value === "chapters") return "左右滑动切换章节，单击中间从本章开始听。";
+  if (screen.value === "player") return "单击中间暂停或继续，左滑下一段，右滑上一段。";
+  if (screen.value === "find") return "中间说书名或作者，下方左侧最近搜索、右侧未听过的书，再下方换书源。";
+  return "";
+});
+const gestureHint = computed(() => screen.value === "books" ? "左滑下一本 · 右滑上一本 · 长按简介"
+  : screen.value === "player" ? "单击暂停或继续 · 左右滑动换段"
+  : ["searches", "chapters"].includes(screen.value) ? "左右滑动切换 · 单击执行 · 长按说明"
+  : "单击执行 · 长按听说明");
 function bookSummary() {
   if (!item.value) return `${listLabel.value}里还没有书，可以返回找新书。`;
   const book = item.value.book, local = localBook.value, history = item.value.history;
@@ -60,8 +73,8 @@ function bookSummary() {
 function say(text: string, resume = false) { message.value = text; return announce(text, resume); }
 function clearSearch() { ++operation; controller?.abort(); runtime?.dispose(); runtime = undefined; busy.value = false; cancelCatalogue(); }
 function go(next: Screen) {
-  explorer.reset(); selectedAction.value = ""; screen.value = next; message.value = "";
-  void say(`${title.value}。${summary.value}`);
+  gestures.reset(); selectedAction.value = ""; screen.value = next; message.value = "";
+  void say(`${title.value}。${summary.value}。${screenInstructions.value}`);
 }
 function showBooks(kind: "shelf" | "history" | "unread") {
   clearSearch(); nextCursor = undefined; index.value = 0;
@@ -82,11 +95,12 @@ async function startBook(book: Book, target?: number, paragraph?: number) {
   const token = operation;
   const ch = target ?? Math.max(0, book.chapters.findIndex((chapter) => chapter.id === book.progress?.chapterId));
   if (!book.downloaded.includes(book.chapters[ch]?.id ?? "")) { await say("要听的章节尚未下载，请先继续下载。"); return; }
-  await say("正在准备声音，可以返回取消等待。");
+  message.value = "正在准备声音，可以返回取消等待。";
+  if (screen.value !== "player" && screen.value !== "speed") await say("正在准备声音。单击中间暂停或继续，左滑下一段，右滑上一段。");
   if (token !== operation) return;
   if (target === undefined && tts.playback.bookId === book.localId && tts.playback.phase === "paused") await controlListening("resume");
   else await startListening(book, ch, paragraph ?? book.progress?.paragraph ?? 0);
-  if (token === operation) { explorer.reset(); selectedAction.value = ""; screen.value = "player"; message.value = ""; }
+  if (token === operation) { gestures.reset(); selectedAction.value = ""; screen.value = "player"; message.value = ""; }
 }
 async function chooseBook() {
   const token = operation;
@@ -161,6 +175,7 @@ function back() {
   clearSearch(); void cancelRecognition(); void cancelAnnouncements();
   if (screen.value === "home") { void say("当前已经是语音听书首页。"); return; }
   if (screen.value === "help") go(helpReturn);
+  else if (screen.value === "exit") go(exitReturn);
   else if (["more", "chapters"].includes(screen.value)) go("books");
   else if (screen.value === "speed") go("player");
   else if (["query", "searches"].includes(screen.value)) go("find");
@@ -194,45 +209,68 @@ const actions: Record<string, () => void | Promise<void>> = {
   toggle: () => run(async () => {
     const pause = pauseOnToggle ?? playbackIntended.value; pauseOnToggle = undefined;
     if (!playingBook.value) { await say("请先从书架选择一本书。"); return; }
-    if (pause) { await controlListening("pause"); await say("已暂停，进度已保存。"); }
-    else if (tts.playback.phase === "paused") { const token = operation; await say("正在继续播放这本书。"); if (token === operation) await controlListening("resume"); }
+    if (pause) { await controlListening("pause"); message.value = "已暂停，进度已保存。"; }
+    else if (tts.playback.phase === "paused") { await controlListening("resume"); message.value = "正在继续播放这本书。"; }
     else await startBook(playingBook.value);
   }),
   paragraphPrevious: () => run(() => moveParagraph(-1)), paragraphNext: () => run(() => moveParagraph(1)),
   speed: () => go("speed"),
   slower: () => run(async () => { tts.speed = Math.max(0.5, tts.speed - 0.25); await saveTtsOptions(); await say(summary.value); }),
   faster: () => run(async () => { tts.speed = Math.min(2, tts.speed + 0.25); await saveTtsOptions(); await say(summary.value); }),
-  exit: () => go("exit"), cancelExit: back,
-  confirmExit: () => run(async () => { await say("正在退出无障碍模式。"); await disableAccessibility(); }),
+  exit: () => {
+    if (screen.value !== "exit") exitReturn = screen.value;
+    clearSearch(); void cancelRecognition(); go("exit");
+  }, cancelExit: back,
+  confirmExit: () => run(disableAccessibility),
   help: () => { if (screen.value !== "help") helpReturn = screen.value; go("help"); },
-  instructions: () => say("移动手指听按钮名称，抬手选中。在屏幕任意位置点按两次执行。左下角返回，右下角帮助。书籍一次显示一本，上一本和下一本用于选择。"),
+  instructions: () => say("单击按钮直接执行，长按听说明，松手不会执行。书籍一次显示一本，左滑下一本，右滑上一本，也可以单击上一本和下一本。长按中间按钮听简介。播放页单击中间暂停或继续，左右滑动换段。左下角返回，右下角帮助。右上角退出无障碍模式，单击后再单击确认退出。"),
 };
-function targetAt(x: number, y: number) { return document.elementFromPoint(x, y)?.closest<HTMLElement>("[data-action]")?.dataset.action ?? ""; }
+function targetAt(event: PointerEvent) {
+  const target = document.elementFromPoint?.(event.clientX, event.clientY) ?? event.target;
+  return target instanceof Element ? target.closest<HTMLElement>("[data-action]")?.dataset.action ?? "" : "";
+}
 function element(id: string) { return root.value?.querySelector<HTMLElement>(`[data-action="${id}"]`); }
 function describe(id: string) {
   selectedAction.value = id;
+  navigator.vibrate?.(35);
+  if (screen.value === "books" && (id === "choose" || id === "repeat")) {
+    void say(`${item.value?.book.title ?? listLabel.value}。${item.value?.book.description?.slice(0, 2000) || "这本书没有简介。"}`); return;
+  }
   const label = element(id)?.dataset.speech ?? element(id)?.textContent ?? "";
-  navigator.vibrate?.(25); void say(`这是${label.trim()}按钮。`, screen.value === "player");
+  void say(`这是${label.trim()}按钮，单击执行。`, screen.value === "player" || screen.value === "speed");
 }
 function activate(id: string) {
+  navigator.vibrate?.(15);
   if (id === "toggle") pauseOnToggle = playbackIntended.value;
   const token = operation;
   void cancelAnnouncements().then(() => { if (token === operation) return actions[id]?.(); });
 }
-const explorer = new ExplorationController(describe, activate);
+function swipe(delta: -1 | 1) {
+  const id = screen.value === "books" ? delta > 0 ? "next" : "previous"
+    : screen.value === "player" ? delta > 0 ? "paragraphNext" : "paragraphPrevious"
+    : screen.value === "searches" ? delta > 0 ? "searchNext" : "searchPrevious"
+    : screen.value === "chapters" ? delta > 0 ? "chapterNext" : "chapterPrevious" : "";
+  if (id) activate(id);
+}
+const gestures = new DirectGestureController(describe, activate, swipe);
 function pointerDown(event: PointerEvent) {
   touchInput = event.pointerType !== "mouse";
-  if (!event.isPrimary || event.pointerType === "mouse") return;
-  event.preventDefault(); root.value?.setPointerCapture(event.pointerId);
-  explorer.down(targetAt(event.clientX, event.clientY), event.clientX, event.clientY, performance.now());
+  if (event.pointerType === "mouse") return;
+  if (!event.isPrimary) { gestures.reset(); pointerId = undefined; return; }
+  pointerId = event.pointerId; selectedAction.value = ""; root.value?.setPointerCapture(event.pointerId);
+  gestures.down(targetAt(event), event.clientX, event.clientY, performance.now());
 }
 function pointerMove(event: PointerEvent) {
-  if (!event.isPrimary || event.pointerType === "mouse" || !event.buttons) return;
-  explorer.move(targetAt(event.clientX, event.clientY), event.clientX, event.clientY);
+  if (event.pointerId !== pointerId) return;
+  gestures.move(event.clientX, event.clientY);
 }
 function pointerUp(event: PointerEvent) {
-  if (!event.isPrimary || event.pointerType === "mouse") return;
-  event.preventDefault(); explorer.up(performance.now());
+  if (event.pointerId !== pointerId) return;
+  pointerId = undefined;
+  gestures.up(targetAt(event), event.clientX, event.clientY, performance.now());
+}
+function pointerCancel(event: PointerEvent) {
+  if (event.pointerId === pointerId) { gestures.reset(); pointerId = undefined; selectedAction.value = ""; }
 }
 function click(event: MouseEvent) {
   if (event.detail === 0 || !touchInput) {
@@ -240,22 +278,27 @@ function click(event: MouseEvent) {
     if (id) activate(id);
   }
 }
-watch(screen, () => explorer.reset());
+watch(screen, () => { gestures.reset(); pointerId = undefined; });
 watch(selectedAction, async (id) => {
   await nextTick();
   root.value?.querySelectorAll<HTMLElement>("[data-action]").forEach((button) => button.classList.toggle("selected", button.dataset.action === id));
 });
 watch(() => tts.playback.error, (error) => { if (error) void say(error); });
 watch(() => state.error, (error) => { if (error) void say(`本地保存失败：${error}`); });
-watch(() => accessibility.active, (active) => { if (!active) back(); else void say(`${title.value}。${summary.value}`); });
-onMounted(() => { void say(`语音听书首页。${summary.value}`); });
-onBeforeUnmount(() => { explorer.reset(); clearSearch(); void cancelAnnouncements(); void cancelRecognition(); });
+watch(() => accessibility.active, (active) => { if (!active) back(); else void say(`${title.value}。${summary.value}。${screenInstructions.value}`); });
+onMounted(() => { void say(`语音听书首页。${summary.value}。${screenInstructions.value}右上角是退出无障碍模式。`); });
+onBeforeUnmount(() => { gestures.reset(); clearSearch(); void cancelAnnouncements(); void cancelRecognition(); });
 </script>
 
 <template>
   <main ref="root" class="accessible-mode" :class="{ 'is-speaking': accessibility.speaking }"
-    @pointerdown="pointerDown" @pointermove="pointerMove" @pointerup="pointerUp" @pointercancel="explorer.reset()" @click.prevent="click">
-    <h1>{{ title }}</h1>
+    @pointerdown="pointerDown" @pointermove="pointerMove" @pointerup="pointerUp" @pointercancel="pointerCancel" @lostpointercapture="pointerCancel" @contextmenu.prevent @click.prevent="click">
+    <header class="a11y-header">
+      <h1>{{ title }}</h1>
+      <button class="a11y-exit-shortcut" data-action="exit" data-speech="退出无障碍模式，协助者可直接单击">
+        <span>退出无障碍模式</span><small>协助者单击此处</small>
+      </button>
+    </header>
     <button class="a11y-summary" data-action="repeat" data-speech="重听当前书籍和状态" :class="{ selected: selectedAction === 'repeat' }">
       {{ summary }}
     </button>
@@ -266,8 +309,8 @@ onBeforeUnmount(() => { explorer.reset(); clearSearch(); void cancelAnnouncement
         <button data-action="find">找新书</button>
       </template>
       <template v-else-if="screen === 'books'">
-        <div class="a11y-row"><button data-action="previous">上一本</button><button data-action="next">下一本</button></div>
         <button class="a11y-primary" data-action="choose">{{ primaryLabel }}</button>
+        <div class="a11y-row"><button data-action="previous">上一本</button><button data-action="next">下一本</button></div>
         <button data-action="more">更多：简介与章节</button>
       </template>
       <template v-else-if="screen === 'more'">
@@ -285,12 +328,12 @@ onBeforeUnmount(() => { explorer.reset(); clearSearch(); void cancelAnnouncement
         <button data-action="dictate">重新说一遍</button>
       </template>
       <template v-else-if="screen === 'searches'">
-        <div class="a11y-row"><button data-action="searchPrevious">上一项</button><button data-action="searchNext">下一项</button></div>
         <button class="a11y-primary" data-action="reuseSearch">使用这个搜索</button>
+        <div class="a11y-row"><button data-action="searchPrevious">上一项</button><button data-action="searchNext">下一项</button></div>
       </template>
       <template v-else-if="screen === 'chapters'">
-        <div class="a11y-row"><button data-action="chapterPrevious">上一章</button><button data-action="chapterNext">下一章</button></div>
         <button class="a11y-primary" data-action="chapterPlay">从本章开始听</button>
+        <div class="a11y-row"><button data-action="chapterPrevious">上一章</button><button data-action="chapterNext">下一章</button></div>
       </template>
       <template v-else-if="screen === 'player'">
         <button class="a11y-primary" data-action="toggle">{{ playbackIntended ? '暂停播放' : tts.playback.phase === 'paused' ? '继续播放' : '重新开始' }}</button>
@@ -302,15 +345,15 @@ onBeforeUnmount(() => { explorer.reset(); clearSearch(); void cancelAnnouncement
         <button class="a11y-primary" data-action="toggle">{{ playbackIntended ? '暂停播放' : '继续播放' }}</button>
       </template>
       <template v-else-if="screen === 'exit'">
+        <p class="a11y-exit-instructions">请单击“确认退出”，恢复普通界面。书籍和阅读进度会保留。</p>
         <button data-action="cancelExit">取消，留在此模式</button>
         <button class="a11y-primary" data-action="confirmExit">确认退出</button>
       </template>
       <template v-else-if="screen === 'help'">
         <button class="a11y-primary" data-action="instructions">重听操作说明</button>
-        <button data-action="exit">退出此模式</button>
       </template>
     </div>
-    <div class="a11y-feedback" role="status">{{ accessibility.recording ? '正在听，请说书名或作者…' : accessibility.speaking ? '正在准备或播报提示…' : busy ? '正在处理，可返回取消等待' : accessibility.error || message || '触摸听说明，双击执行' }}</div>
-    <footer class="a11y-row"><button data-action="back">返回</button><button data-action="help">操作帮助</button></footer>
+    <div class="a11y-feedback" role="status">{{ accessibility.recording ? '正在听，请说书名或作者…' : accessibility.speaking ? '正在准备或播报提示…' : busy ? '正在处理，可返回取消等待' : accessibility.error || gestureHint }}</div>
+    <footer class="a11y-row a11y-footer"><button data-action="back">返回</button><button data-action="help">操作帮助</button></footer>
   </main>
 </template>

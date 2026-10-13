@@ -1,7 +1,7 @@
 {
   "name": "myreads",
-  "version": "0.3.9",
-  "androidVersionCode": 14,
+  "version": "0.3.10",
+  "androidVersionCode": 15,
   "private": true,
   "type": "module",
   "scripts": {

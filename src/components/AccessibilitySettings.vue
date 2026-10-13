@@ -15,6 +15,7 @@ async function configure() {
   <section class="accessibility-settings">
     <h2>语音无障碍模式</h2>
     <p>由协助者完成首次设置。开启后使用超大按钮和语音选择书籍、查看最近读听、搜索与听书，无需开启 TalkBack。</p>
+    <p>单击直接执行，长按听说明；书籍列表左右滑动换书，播放页左右滑动换段。左下角返回，右下角帮助，右上角可单击退出无障碍模式。</p>
     <p>必须先下载语音模型；每次进入模式会加载模型，操作提示和正文共用本地模型。首次生成提示可能需要等待，重复提示会使用缓存。</p>
     <button class="button secondary" :disabled="configuring || accessibility.preparing" @click="configure">{{ configuring ? '正在配置…' : '先配置语音搜索的麦克风权限' }}</button>
     <p v-if="microphoneMessage" role="status">{{ microphoneMessage }}</p>
