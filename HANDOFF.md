@@ -12,7 +12,7 @@
 
 ## 当前完成状态
 
-阅读、听书、更新和语音无障碍模式已经实现，0.3.9 已由 GitHub Actions 签名公开发布，目录打开时自动定位当前阅读／播放章节。此前的中断对白分组、固定参考续接及异常短句重试已完成本机验证。默认听书在首个语组完成后开始播放，旧自动设置迁移为边生成边播放。无障碍模式由他人协助首次配置，日常不依赖 TalkBack，进入前必须实际加载现有 MOSS 模型。0.3.6 默认使用完整语组文字与语音 token 的有界续接，可在听书页切换独立朗读；句首保护和确定结束判定保留。尚未在实体手机量化长篇听感、无障碍操作延迟或耗电。详见下文。
+阅读、听书、更新和语音无障碍模式已经实现，0.3.10 已由 GitHub Actions 签名公开发布，无障碍模式改为单击执行、长按说明、左右滑动换书／换段，右上角明确退出入口。目录打开时自动定位当前阅读／播放章节。此前的中断对白分组、固定参考续接及异常短句重试已完成本机验证。默认听书在首个语组完成后开始播放，旧自动设置迁移为边生成边播放。无障碍模式由他人协助首次配置，日常不依赖 TalkBack，进入前必须实际加载现有 MOSS 模型。0.3.6 默认使用完整语组文字与语音 token 的有界续接，可在听书页切换独立朗读；句首保护和确定结束判定保留。尚未在实体手机量化长篇听感、无障碍操作延迟或耗电。详见下文。
 
 - `src/App.vue`、`src/style.css`：移动端书架、继续阅读、搜索及分页、详情和完整目录预览、下载管理、ZIP/JSON/HTTPS 书源导入确认、启停与卸载、错误/空态、删除确认、原生返回键和应用生命周期。
 - `src/components/Reader.vue`：本地单章上下滚动、上下章、目录跳章、字号、行距、纸色/明亮/夜读、自动保存章节/段落/段内位置。未下载章节禁用。
@@ -22,10 +22,10 @@
 - `src/services/html.ts`：将 HTML 片段包在 body 中，修正 linkedom 对目录展开片段的不同处理，避免丢失中间章节。
 - `src/services/http.ts`、`dev-proxy.ts`：Android 原生 HTTP；开发期本机 HTTPS 代理，校验域名、DNS 公网 IP、固定已校验地址、请求/响应大小及超时。已修复 Node 26 的 DNS `lookup` 全量返回格式。
 - `src/services/packages.ts`、`import.ts`：书源包格式、域名与大小验证；ZIP/JSON 解码，HTTPS 下载包，安装前显示名称、版本和声明域名。
-- `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.9 / versionCode 14，原生插件已同步。版本从 `package.json` 读取。
+- `android/`：Capacitor Android 工程、纸间书本图标及启动主题、版本 0.3.10 / versionCode 15，原生插件已同步。版本从 `package.json` 读取。
 - `scripts/build-android.mjs`：当前 Mac 使用已安装的 JDK 21 / SDK；若 shell 配置的是旧 JDK，会切换到 Homebrew JDK 21。
 
-发布 APK：`release/zijian-0.3.9.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
+发布 APK：`release/zijian-0.3.10.apk`，同时生成 `update.json` 与 `SHA256SUMS`。公开下载入口：<https://github.com/escapingbug/myreads/releases/latest>。旧版调试 APK 与本机截图/音频记录在 `artifacts/`，均不提交 Git。
 
 ## 已完成的验证
 
@@ -284,7 +284,7 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - 实际线上 APK 58,844,331 bytes，SHA-256 `0b628bd0b487e6d2f132a713b75fd9176065ca6e355d388a8e96bb2224057c33`；APK / update.json / SHA256SUMS / GitHub assets 摘要一致。签名验证通过，证书 SHA-256 仍为 `a0abb5c432d5ada068efe059a63c1ec4adef40754a915559e0520538124c1112`；包名和版本正确、非调试、不含模型权重，编译后的前端资产包含新目录定位逻辑。
 - 未认证公开最新正式 Release API 已返回 v0.3.9。`release/` 已同步实际发布资产，核对记录在 `artifacts/release-0.3.9-verification.json` 等文件。本轮未覆盖安装模拟器，未完成目录滚动的浏览器或实体手机视觉验证；本机浏览器自动化连接不可用。
 
-## 0.3.10 无障碍直接操作（2026-10-13，待发布）
+## 0.3.10 无障碍直接操作（2026-10-13）
 
 用户要求实现固定大区域单击、长按说明和左右滑动浏览，并让协助者明确知道如何退出。`DirectGestureController` 在短按松手时执行，长按 600ms 只播报一次，松手不会执行。移动超过 16px 取消单击／长按；水平位移至少 64px 且明显大于垂直位移时切换一项。触摸取消、多指触摸与切页清理待处理手势；兼容点击不重复执行。允许垂直滚动中间操作区，退出及底部返回／帮助常驻。
 
@@ -292,3 +292,4 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - 暂停／继续直接控制播放器并用振动反馈，页内换段不等待准备提示语音。进入播放页前播报播放操作。每页右上角「退出无障碍模式／协助者单击此处」，确认退出不等待语音，取消回原页面；进入退出页取消搜索／识别。首次设置和实际加载模型的要求保留。
 - 8 个测试文件、52 项前端测试通过，覆盖单击、长按、滑动方向、误触取消、兼容点击、搜索分页、直接暂停／继续／换段及退出。前端生产构建与 Android assembleDebug 通过。通过本机浏览器检查 320×568 和 360×640 的首页、书架及退出布局；真实手机触摸和本地提示延迟仍待用户验证。
 - 版本 0.3.10 / code15，说明 `docs/releases/0.3.10.md`；沿用用户此前明确要求的直接发布流程。预览夹具在 `artifacts/accessibility-direct/`（不提交），尚未替换模拟器里的正式 APK。
+- 已公开发布为 latest：<https://github.com/Escapingbug/myreads/releases/tag/v0.3.10>，源码 `63d289e93a311e6c237386616fc32a9d36426707`，流水线 <https://github.com/Escapingbug/myreads/actions/runs/38366131689> 全部成功，包括前端测试、Android 原生回归、调试及签名发布构建。实际公开 APK 58,845,139 bytes，SHA-256 `14bed29d08300b434f11bcbe109a24585178dd244e3089140e8161083ba3dba2`，与 update.json、SHA256SUMS、GitHub 资产摘要一致。签名与旧版一致，包名／版本正确，非调试、不含模型，已检查编译资产包含新手势及退出文案、无旧触摸选中说明。`release/` 已同步线上资产，核对报告 `artifacts/accessibility-direct/release-verification.json`。
