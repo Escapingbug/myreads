@@ -310,3 +310,5 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - 首次标签流水线验证、签名构建和 GitHub 正式发布成功；Gitee 仓库初始化和预发布创建成功（id1207524），首次 APK 上传触及 180 秒超时，未转正式。已将大文件上传时限单独延长到 15 分钟并增加阶段日志，先上传小校验文件验证通路，继续使用 GitHub 的同一签名 APK 重试。公开 APK 59,934,346 bytes / SHA-256 20525ecc419409077535891daf7a9cf5220e623dd217dddd3ee5a4803fa713cb，证书与旧版一致。实际 APK 已覆盖安装 API35 模拟器，从 0.3.8 / code13 升级到 0.3.11 / code16；7 条数据库记录、播放偏好和 13 个模型文件逐值／哈希一致，书架启动正常。记录在 artifacts/release-0.3.11/。等待 Gitee 同步重试结果，不能宣称 Gitee 已正式发布。
 
 - 用户随后明确要求：发布不允许使用模拟器。此后所有发布与验证停止使用模拟器及 ADB，只使用 CI、主机单元测试、APK 静态／签名检查与公开下载校验。此前覆盖安装记录仅为限制提出前的历史事实，不作为后续发布流程要求。约束已写入 AGENTS.md 与 docs/distribution.md。
+
+- Gitee 第二次同步（run38711522758）小型 SHA256SUMS 已上传且匿名下载校验成功，实际 CDN 为 foruda.gitee.com，符合应用白名单。APK 上传仍触发 Undici 内部固定 300 秒 HeadersTimeoutError；外层 15 分钟 AbortSignal 不能覆盖该限制。发布 CLI 改用 Node 原生 HTTPS 发送带明确 Content-Length 的 multipart，保留单独 15 分钟总时限及凭据仅存内存；继续复用同一 GitHub APK，不改动已发布安装包。

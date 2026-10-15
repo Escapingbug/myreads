@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { unzipSync, strFromU8 } from 'fflate';
 import { publishGitee } from './lib/gitee-release.mjs';
+import { giteeTransport } from './lib/gitee-upload.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const config = JSON.parse(await readFile(join(root, 'android/app/src/main/assets/distribution.json'), 'utf8'));
@@ -37,6 +38,6 @@ if (process.argv.includes('--dry-run')) {
   console.log(JSON.stringify({ repository, tag, files: files.map(({ bytes, ...file }) => file) }, null, 2));
 } else {
   const url = await publishGitee({ repository, token: process.env.GITEE_TOKEN, tag,
-    targetCommitish: process.env.GITEE_TARGET_BRANCH || undefined, notes, files });
+    targetCommitish: process.env.GITEE_TARGET_BRANCH || undefined, notes, files }, giteeTransport());
   console.log(`Gitee 发布完成并通过匿名下载校验：${url}`);
 }
