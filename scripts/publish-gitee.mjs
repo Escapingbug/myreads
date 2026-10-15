@@ -21,7 +21,7 @@ if (!/^v\d+\.\d+\.\d+$/.test(tag) || tag !== `v${manifest.versionName}` || manif
 const notes = await readFile(join(root, `docs/releases/${manifest.versionName}.md`), 'utf8');
 // The exact GitHub artifacts are reused, including the APK signature and hash.
 const files = [];
-for (const name of [manifest.apkName, 'SHA256SUMS', 'update.json']) {
+for (const name of ['SHA256SUMS', manifest.apkName, 'update.json']) {
   const bytes = await readFile(join(root, 'release', name));
   const sha256 = createHash('sha256').update(bytes).digest('hex');
   if (name === manifest.apkName) {

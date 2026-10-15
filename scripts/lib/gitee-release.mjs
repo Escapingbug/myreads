@@ -39,7 +39,7 @@ export async function publishGitee({ repository, token, tag, targetCommitish, no
   const base = `https://gitee.com/api/v5/repos/${repository}`;
   async function api(path, method = 'GET', body, missing = false) {
     const multipart = body instanceof FormData;
-    const response = await fetcher(base + path, { method, redirect: 'error', signal: AbortSignal.timeout(180_000),
+    const response = await fetcher(base + path, { method, redirect: 'error', signal: AbortSignal.timeout(multipart ? 15 * 60_000 : 180_000),
       headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', ...(body && !multipart ? { 'Content-Type': 'application/json' } : {}) },
       body: body ? multipart ? body : JSON.stringify(body) : undefined });
     if (missing && response.status === 404) return undefined;
@@ -66,11 +66,13 @@ export async function publishGitee({ repository, token, tag, targetCommitish, no
     if (matching.length > 1) throw new Error(`Gitee 有同名重复附件：${file.name}`);
     if (!matching.length) {
       if (!release.prerelease) throw new Error('已公开的 Gitee 发行版缺少附件，请人工检查；不会覆盖正式版本');
+      console.log(`正在上传 ${file.name}（${file.size} bytes）`);
       const form = new FormData(); form.set('file', new Blob([file.bytes]), file.name);
       await api(`/releases/${release.id}/attach_files`, 'POST', form);
     }
-    // APK first, manifest last. Partial uploads remain prereleases and invisible
+    // Manifest last. Partial uploads remain prereleases and invisible
     // to the app. Re-running verifies existing bytes instead of duplicating them.
+    console.log(`正在匿名校验 ${file.name}`);
     await verifyPublicFile(releaseFile(repository, tag, file.name), file, fetcher);
   }
   if (release.prerelease) await api(`/releases/${release.id}`, 'PATCH', { name: `纸间 ${tag}`, body: notes, prerelease: false });

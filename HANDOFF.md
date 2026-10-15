@@ -306,3 +306,5 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - 为消除模型最后一个文件的 GitHub 依赖，把固定提交的 Silero VAD（1,289,603 bytes）随 APK 提供，在模型安装时本地复制并校验。使用原清单固定 SHA-256，许可证已有且补充 THIRD_PARTY_NOTICES。13 个目标文件、模型 ID、revision 与所有文件哈希保持不变，已有模型无需重下；大型 MOSS 模型仍不随 APK 分发，也不上传 Gitee。
 - 验证：79 项前端／发布工具测试、76 项 Android 原生测试通过；生产构建、Capacitor 同步、Android testDebugUnitTest / assembleDebug 通过。检查实际 debug APK 内 anciety/myreads 配置与内置 VAD 原始大小／SHA-256 正确。未安装 debug APK，未改动模拟器里的正式版或用户数据。
 - 尚待实际 Gitee 仓库的匿名发布列表、清单／APK 下载、CDN 跳转、Range 与真实覆盖安装验证；没有凭模拟接口宣称双渠道已经上线。已收到仓库地址与凭据配置确认，将继续公开发布与实际校验。
+
+- 首次标签流水线验证、签名构建和 GitHub 正式发布成功；Gitee 仓库初始化和预发布创建成功（id1207524），首次 APK 上传触及 180 秒超时，未转正式。已将大文件上传时限单独延长到 15 分钟并增加阶段日志，先上传小校验文件验证通路，继续使用 GitHub 的同一签名 APK 重试。公开 APK 59,934,346 bytes / SHA-256 20525ecc419409077535891daf7a9cf5220e623dd217dddd3ee5a4803fa713cb，证书与旧版一致。实际 APK 已覆盖安装 API35 模拟器，从 0.3.8 / code13 升级到 0.3.11 / code16；7 条数据库记录、播放偏好和 13 个模型文件逐值／哈希一致，书架启动正常。记录在 artifacts/release-0.3.11/。等待 Gitee 同步重试结果，不能宣称 Gitee 已正式发布。
