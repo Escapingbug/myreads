@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, it, expect, vi } from "vitest";
-import { createServer, request } from "node:http";
+import { createServer } from "node:http";
 import type { IncomingMessage, ServerResponse } from "node:http";
 // @ts-ignore Plain Node publication tooling.
 import { giteeTransport } from "../scripts/lib/gitee-upload.mjs";
@@ -27,18 +27,18 @@ describe("Gitee multipart transport", () => {
       expect(bytes.toString()).toContain("signed-apk-bytes");
       res.writeHead(201, { "Content-Type": "application/json" }); res.end(JSON.stringify({ id: 1 }));
     }, async (url) => {
-      const result = await giteeTransport({ request })(url, options());
+      const result = await giteeTransport({ allowHttp: true })(url, options());
       expect(result.status).toBe(201); expect(await result.json()).toEqual({ id: 1 });
     });
   });
   it("enforces the upload timeout even if the server never responds", async () => {
     await withServer((req) => req.resume(), async (url) => {
-      await expect(giteeTransport({ request, timeoutMs: 30 })(url, options())).rejects.toThrow("上传超时");
+      await expect(giteeTransport({ allowHttp: true, timeoutMs: 60 })(url, options())).rejects.toThrow("上传超时");
     });
   });
   it("does not follow redirects carrying upload credentials", async () => {
     await withServer((req, res) => { req.resume(); res.writeHead(302, { Location: "https://unrelated.test" }); res.end(); }, async (url) => {
-      const result = await giteeTransport({ request })(url, options()); expect(result.status).toBe(302);
+      const result = await giteeTransport({ allowHttp: true })(url, options()); expect(result.status).toBe(302);
     });
   });
   it("keeps metadata requests on the original fetch implementation", async () => {

@@ -30,7 +30,7 @@ npm run release:gitee -- vX.Y.Z
 
 本地发布从环境变量读取 `GITEE_TOKEN`，可选 `GITEE_TARGET_BRANCH`。脚本先核对 APK 与更新清单、校验文件和 APK 内的 Gitee 配置，禁止拿仍指向旧仓库的 APK 发布。
 
-同步先创建预发布，依次上传 SHA256SUMS、APK、update.json，逐个匿名下载并验证大小及 SHA-256，全部成功后才改成正式版本。大文件上传最多等待 15 分钟，避免跨境上传较慢时被小请求的超时限制中断。中途失败保留预发布，App 不会选中它。可重新运行脚本：已有同名附件验证后复用，不重复上传；正式版本不覆盖。GitHub 已发布而 Gitee 同步失败时，GitHub 版本仍可使用，Gitee 同步需单独重试；脚本可以直接本地重跑，或在 GitHub Actions 的「Retry Gitee release sync」工作流中填写已有版本标签重新同步，不需要重新创建 GitHub Release 或重新构建 APK。
+同步先创建预发布，依次上传 SHA256SUMS、APK、update.json，逐个匿名下载并验证大小及 SHA-256，全部成功后才改成正式版本。大文件通过 curl 上传，最多等待 15 分钟，避免跨境上传较慢时被小请求的超时限制中断。中途失败保留预发布，App 不会选中它。可重新运行脚本：已有同名附件验证后复用，不重复上传；正式版本不覆盖。GitHub 已发布而 Gitee 同步失败时，GitHub 版本仍可使用，Gitee 同步需单独重试；脚本可以直接本地重跑，或在 GitHub Actions 的「Retry Gitee release sync」工作流中填写已有版本标签重新同步，也可选择另一个 CI 运行环境排查网络问题，不需要重新创建 GitHub Release 或重新构建 APK。
 
 ## 自动选择规则
 

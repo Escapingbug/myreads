@@ -312,3 +312,5 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - 用户随后明确要求：发布不允许使用模拟器。此后所有发布与验证停止使用模拟器及 ADB，只使用 CI、主机单元测试、APK 静态／签名检查与公开下载校验。此前覆盖安装记录仅为限制提出前的历史事实，不作为后续发布流程要求。约束已写入 AGENTS.md 与 docs/distribution.md。
 
 - Gitee 第二次同步（run38711522758）小型 SHA256SUMS 已上传且匿名下载校验成功，实际 CDN 为 foruda.gitee.com，符合应用白名单。APK 上传仍触发 Undici 内部固定 300 秒 HeadersTimeoutError；外层 15 分钟 AbortSignal 不能覆盖该限制。发布 CLI 改用 Node 原生 HTTPS 发送带明确 Content-Length 的 multipart，保留单独 15 分钟总时限及凭据仅存内存；继续复用同一 GitHub APK，不改动已发布安装包。
+
+- 原生 HTTPS 重试 run38712511349 的 APK 上传仍长期不返回，改用 curl（自动协商 HTTP/2、独立总时限、输出 HTTP/发送字节/耗时诊断）。鉴权放入 CI 私有临时文件（0600，目录0700），不进入进程参数，操作后清理；元数据仍使用 fetch。手动同步工作流新增 ubuntu / macos 运行环境选择用于排查上传网络，全程不使用模拟器。

@@ -1,40 +1,40 @@
-import { request as httpsRequest } from 'node:https';
-import { randomBytes } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { mkdtemp, writeFile, readFile, rm, chmod } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+const execute = promisify(execFile);
 
-// Native HTTPS avoids fetch/Undici's independent 300-second headers timeout.
-// Metadata requests still use fetch; credentials never enter command arguments.
-export function giteeTransport({ fetcher = fetch, request = httpsRequest, timeoutMs = 15 * 60_000 } = {}) {
+// curl negotiates HTTP/2 where available and has one explicit upload deadline.
+// Authorization is read from a private temporary file, never command arguments.
+export function giteeTransport({ fetcher = fetch, timeoutMs = 15 * 60_000, allowHttp = false } = {}) {
   return async function transport(url, options = {}) {
     if (!(options.body instanceof FormData)) return fetcher(url, options);
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:' && !(allowHttp && parsed.protocol === 'http:')) throw new Error('Gitee 上传必须使用 HTTPS');
     const file = options.body.get('file');
     if (!(file instanceof Blob) || !/^[A-Za-z0-9._-]+$/.test(file.name)) throw new Error('Gitee 上传文件无效');
-    const bytes = Buffer.from(await file.arrayBuffer());
-    const boundary = `myreads-${randomBytes(16).toString('hex')}`;
-    const prefix = Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${file.name}"\r\nContent-Type: application/octet-stream\r\n\r\n`);
-    const suffix = Buffer.from(`\r\n--${boundary}--\r\n`);
-    return new Promise((resolve, reject) => {
-      let timer;
-      const pending = request(url, { method: 'POST', headers: { ...options.headers,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`, 'Content-Length': prefix.length + bytes.length + suffix.length,
-      } }, (response) => {
-        const chunks = []; let size = 0;
-        response.on('data', (chunk) => {
-          size += chunk.length;
-          if (size > 1024 * 1024) pending.destroy(new Error('Gitee 上传响应过大'));
-          else chunks.push(chunk);
-        });
-        response.on('error', reject);
-        response.on('aborted', () => reject(new Error('Gitee 上传响应中断')));
-        response.on('end', () => {
-          clearTimeout(timer);
-          resolve(new Response(Buffer.concat(chunks), { status: response.statusCode || 502 }));
-        });
-      });
-      pending.on('error', reject);
-      const cleanup = () => clearTimeout(timer);
-      pending.on('close', cleanup);
-      timer = setTimeout(() => pending.destroy(new Error('Gitee 文件上传超时')), timeoutMs);
-      pending.write(prefix); pending.write(bytes); pending.end(suffix);
-    });
+    const directory = await mkdtemp(join(tmpdir(), 'myreads-gitee-'));
+    try {
+      await chmod(directory, 0o700);
+      const input = join(directory, file.name), headers = join(directory, 'headers'), output = join(directory, 'response');
+      await writeFile(input, Buffer.from(await file.arrayBuffer()), { mode: 0o600 });
+      await writeFile(headers, Object.entries(options.headers || {}).map(([name, value]) => `${name}: ${value}`).join('\n') + '\n', { mode: 0o600 });
+      await writeFile(output, '', { mode: 0o600 });
+      const args = ['--silent', '--show-error', '--proto', allowHttp ? '=http,https' : '=https', '--connect-timeout', '30',
+        '--max-time', String(timeoutMs / 1000), '--max-filesize', '1048576', '--request', 'POST', '--header', '@' + headers,
+        '--form', `file=@${input};filename=${file.name}`, '--output', output, '--write-out', '%{http_code} %{size_upload} %{time_total}', url];
+      let stats;
+      try { stats = (await execute('curl', args, { maxBuffer: 1024 * 1024 })).stdout.trim(); }
+      catch (error) {
+        const metrics = /^\d{3} [\d.]+ [\d.]+$/.test(error.stdout?.trim() || '') ? error.stdout.trim() : '无传输统计';
+        throw new Error(`Gitee 文件上传失败（curl ${error.code === 28 ? '上传超时' : error.code || '连接中断'}；HTTP/发送字节/耗时：${metrics}）`);
+      }
+      if (!/^\d{3} [\d.]+ [\d.]+$/.test(stats)) throw new Error('Gitee 上传状态无效');
+      const [status, sent, elapsed] = stats.split(' ');
+      console.log(`Gitee 上传结果：HTTP ${status}，发送 ${sent} bytes，耗时 ${elapsed}s`);
+      const code = Number(status);
+      return new Response([204, 205, 304].includes(code) ? null : await readFile(output), { status: code });
+    } finally { await rm(directory, { recursive: true, force: true }); }
   };
 }
