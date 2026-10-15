@@ -296,7 +296,7 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 
 ## 0.3.11 Gitee 双渠道更新与模型下载（2026-10-15）
 
-用户要求实现自动选择 Gitee / GitHub，并在注册后发布。用户已提供公开仓库 git@gitee.com:anciety/myreads.git，且已在 GitHub Actions 配置 GITEE_TOKEN。版本为 0.3.11 / code16，版本说明 docs/releases/0.3.11.md，准备按既有签名与标签发布流程公开发布。
+用户要求实现自动选择 Gitee / GitHub，并在注册后发布。用户已提供公开仓库 git@gitee.com:anciety/myreads.git，且已在 GitHub Actions 配置 GITEE_TOKEN。版本为 0.3.11 / code16，版本说明 docs/releases/0.3.11.md。现已按原签名在 GitHub 与 Gitee 正式发布，最后同步工作流成功。
 
 - 唯一渠道配置 `android/app/src/main/assets/distribution.json`：GitHub 为现有官方仓库，giteeRepository 已设为 anciety/myreads。前端导入与 Android assets 使用同一配置，实际 debug APK 已核对包含该地址。
 - 应用更新自动模式并行检查，单渠道整体 8 秒截止，Gitee 查询最近 100 个发行版时显式 direction=desc（Gitee 默认升序，已用公共仓库匿名 API 核实），过滤预发布、比较 Android versionCode，同版本优先 Gitee。仅版本名／版本代码／大小／SHA-256 一致时作为相互备用；同版本身份冲突停止检查。部分源离线时保留已确认的较新缓存，不能静默退到较旧镜像，继续下载也不能替换较新的已暂停 APK。
@@ -316,3 +316,8 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - 原生 HTTPS 重试 run38712511349 的 APK 上传仍长期不返回，改用 curl（自动协商 HTTP/2、独立总时限、输出 HTTP/发送字节/耗时诊断）。鉴权放入 CI 私有临时文件（0600，目录0700），不进入进程参数，操作后清理；元数据仍使用 fetch。手动同步工作流新增 ubuntu / macos 运行环境选择用于排查上传网络，全程不使用模拟器。
 
 - 云端大型 APK 上传多次停滞后，使用用户已有 Gitee 浏览器会话的网页附件表单上传同一签名 APK 成功，已取消悬挂云端任务。随后云端 run38714900908 完整验证 APK 与 SHA256SUMS、上传并验证 update.json 均成功；转正式的 PATCH 因缺少必填 tag_name 返回400。已依据官方 ReleasesIdBody 文档补齐该字段，并增加回归断言，继续重跑完成公开发布。没有更改已公开 APK。
+
+- 最终发布完成：GitHub <https://github.com/Escapingbug/myreads/releases/tag/v0.3.11>，Gitee <https://gitee.com/anciety/myreads/releases/tag/v0.3.11>（id1207524 / prerelease=false）。源码标签提交 02d78fc5dacef6d4a0ed9b2ea291867eab723f57。最终同步 <https://github.com/Escapingbug/myreads/actions/runs/38715383539> 成功；最后发布脚本修复提交 1b4a8af 的主分支完整验证 <https://github.com/Escapingbug/myreads/actions/runs/38715328529> 成功。
+- 三个 Gitee 附件均唯一：APK 59,934,346 bytes、update.json 242 bytes、SHA256SUMS 84 bytes。APK SHA-256 20525ecc419409077535891daf7a9cf5220e623dd217dddd3ee5a4803fa713cb，原签名保持一致、非调试、包名与版本正确、内含 anciety/myreads 配置与固定哈希 VAD、小型模型外的大型权重不随包分发。
+- 最终验证仅使用 CI、静态检查与公开网络：匿名下载 Gitee 完整 APK 与 GitHub 文件哈希一致；云端逐文件验哈希后正式发布；将应用实际更新模块打包到主机处理真实线上元数据，结果为 Gitee 优先、GitHub 同文件备用（两个 URL / 相同 SHA-256 / code16）。83 项前端／发布工具测试与 76 项原生主机测试通过。详情 artifacts/release-0.3.11/verification.json、live-update-logic.json 等，不提交。
+- 真实 Gitee Range 请求返回 HTTP200 完整文件，下载器按既有逻辑从头重下；不声称 Gitee 已验证支持续传。大型 APK 的云端 API 上传仍未成功验证，本次采用已有登录会话的 Gitee 网页上传完成 APK，CI 自动校验、补充清单和转正式完成；后续遇到同类网络问题按 docs/distribution.md 的网页预上传流程处理，不重复构建或替换正式 APK。
