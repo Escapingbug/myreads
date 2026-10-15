@@ -83,7 +83,8 @@
       "path": "Silero-VAD/silero_vad_16k_op15.onnx",
       "url": "https://raw.githubusercontent.com/snakers4/silero-vad/1e261b036686cd0017d500ee96acd1c4ba572a9d/src/silero_vad/data/silero_vad_16k_op15.onnx",
       "size": 1289603,
-      "sha256": "7ed98ddbad84ccac4cd0aeb3099049280713df825c610a8ed34543318f1b2c49"
+      "sha256": "7ed98ddbad84ccac4cd0aeb3099049280713df825c610a8ed34543318f1b2c49",
+      "asset": "tts/silero_vad_16k_op15.onnx"
     }
   ]
 }

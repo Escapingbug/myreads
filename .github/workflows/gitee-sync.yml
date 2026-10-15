@@ -1,0 +1,40 @@
+name: Retry Gitee release sync
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing GitHub release tag, e.g. v0.3.11'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: gitee-release-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Download original GitHub release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          gh release download "$RELEASE_TAG" --pattern 'zijian-*.apk' --pattern update.json --pattern SHA256SUMS --dir release
+      - name: Verify and sync existing signed APK to Gitee
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_TARGET_BRANCH: ${{ vars.GITEE_TARGET_BRANCH }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: npm run release:gitee -- "$RELEASE_TAG"

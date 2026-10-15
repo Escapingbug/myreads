@@ -12,6 +12,10 @@
 
 Google SentencePiece 0.2.1 以源代码形式用于原生分词。原始许可证、作者信息及源代码中的版权声明保留在 `android/app/src/main/cpp/vendor/sentencepiece/`。JNI 接口与应用构建配置由纸间补充。
 
+## Silero VAD
+
+Silero VAD（MIT）用于首尾语音活动检测。固定提交 `1e261b036686cd0017d500ee96acd1c4ba572a9d` 的 `silero_vad_16k_op15.onnx` 随 APK 提供，大小 1,289,603 bytes，SHA-256 `7ed98ddbad84ccac4cd0aeb3099049280713df825c610a8ed34543318f1b2c49`。原项目：<https://github.com/snakers4/silero-vad>；许可证保留在 `android/app/src/main/assets/tts/SILERO-LICENSE.txt`。
+
 ## 运行时依赖
 
 ONNX Runtime（MIT）、AndroidX Media3（Apache-2.0）、Vue / Vite / Capacitor（MIT）。其他依赖及其版本记录在 `package-lock.json` 和 Android Gradle 配置中，各自版权与许可证仍属于原作者。

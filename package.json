@@ -1,7 +1,7 @@
 {
   "name": "myreads",
-  "version": "0.3.10",
-  "androidVersionCode": 15,
+  "version": "0.3.11",
+  "androidVersionCode": 16,
   "private": true,
   "type": "module",
   "scripts": {
@@ -14,7 +14,8 @@
     "android:build": "node scripts/build-android.mjs",
     "android:release": "node scripts/build-android.mjs --release",
     "release:prepare": "node scripts/prepare-release.mjs",
-    "sources:pack": "node scripts/pack-sources.mjs"
+    "sources:pack": "node scripts/pack-sources.mjs",
+    "release:gitee": "node scripts/publish-gitee.mjs"
   },
   "dependencies": {
     "@capacitor-community/sqlite": "^8.0.0",

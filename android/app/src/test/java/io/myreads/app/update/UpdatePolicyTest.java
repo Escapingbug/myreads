@@ -32,4 +32,28 @@ public class UpdatePolicyTest {
         assertFalse(UpdatePolicy.allowedRedirect(URI.create("https://example.com/file")));
         assertFalse(UpdatePolicy.allowedRedirect(URI.create("https://user@github.com/file")));
     }
+    @Test public void acceptsOnlyTheConfiguredGiteeRepository() {
+        String url = "https://gitee.com/test-owner/zijian/releases/download/v0.3.0/zijian-0.3.0.apk";
+        UpdatePolicy.validate(url, "0.3.0", 5, 3, 60_000_000, HASH, "test-owner/zijian");
+        for (String repo : new String[] {"", "other/zijian", "test-owner/other", "bad/../zijian"})
+            assertThrows(IllegalArgumentException.class, () -> UpdatePolicy.validate(url, "0.3.0", 5, 3, 60_000_000, HASH, repo));
+        for (String changed : new String[] {url + "?x=1", url.replace("gitee.com", "gitee.com.evil.test"), url.replace("v0.3.0/", "v0.4.0/"), url.replace("https:", "http:")})
+            assertThrows(IllegalArgumentException.class, () -> UpdatePolicy.validate(changed, "0.3.0", 5, 3, 60_000_000, HASH, "test-owner/zijian"));
+    }
+    @Test public void isolatesRedirectHostsForEachProvider() {
+        assertTrue(UpdatePolicy.allowedRedirect(URI.create("https://foruda.gitee.com/attach/file?token=abc"), "gitee.com"));
+        assertTrue(UpdatePolicy.allowedRedirect(URI.create("https://gitee.com/release"), "gitee.com"));
+        assertFalse(UpdatePolicy.allowedRedirect(URI.create("https://foruda.gitee.com/file"), "github.com"));
+        assertFalse(UpdatePolicy.allowedRedirect(URI.create("https://example.com/file"), "gitee.com"));
+        assertFalse(UpdatePolicy.allowedRedirect(URI.create("https://foruda.gitee.com.evil.test/file"), "gitee.com"));
+        assertFalse(UpdatePolicy.allowedRedirect(URI.create("http://foruda.gitee.com/file"), "gitee.com"));
+        assertFalse(UpdatePolicy.allowedRedirect(URI.create("https://user@foruda.gitee.com/file"), "gitee.com"));
+    }
+    @Test public void requiresTheEntireArtifactIdentityToReuseBytes() {
+        assertTrue(UpdatePolicy.sameArtifact("0.3.0", 5, 60_000_000, HASH, "0.3.0", 5, 60_000_000, HASH));
+        assertFalse(UpdatePolicy.sameArtifact("0.3.0", 5, 60_000_000, HASH, "0.3.1", 5, 60_000_000, HASH));
+        assertFalse(UpdatePolicy.sameArtifact("0.3.0", 5, 60_000_000, HASH, "0.3.0", 6, 60_000_000, HASH));
+        assertFalse(UpdatePolicy.sameArtifact("0.3.0", 5, 60_000_000, HASH, "0.3.0", 5, 59_000_000, HASH));
+        assertFalse(UpdatePolicy.sameArtifact("0.3.0", 5, 60_000_000, HASH, "0.3.0", 5, 60_000_000, "b"));
+    }
 }

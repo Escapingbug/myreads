@@ -7,6 +7,7 @@ import androidx.core.app.NotificationCompat;
 import java.io.*;
 import java.net.*;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.List;
 import io.myreads.app.MainActivity;
 import io.myreads.app.R;
 
@@ -32,8 +33,8 @@ public final class ModelDownloadService extends Service {
         if (Build.VERSION.SDK_INT >= 26) getSystemService(NotificationManager.class).createNotificationChannel(
             new NotificationChannel("tts-download", "听书模型下载", NotificationManager.IMPORTANCE_LOW));
         startForeground(3001, notification("准备下载", 0));
-        final boolean mirror = intent != null && intent.getBooleanExtra("mirror", false);
-        new Thread(() -> download(mirror), "tts-model-download").start();
+        final String source = intent == null ? "auto" : intent.getStringExtra("source");
+        new Thread(() -> download(source == null ? "auto" : source), "tts-model-download").start();
         return START_NOT_STICKY;
     }
     private Notification notification(String text, int percent) {
@@ -42,7 +43,7 @@ public final class ModelDownloadService extends Service {
             .setContentTitle("正在下载听书模型").setContentText(text).setContentIntent(open)
             .setOnlyAlertOnce(true).setOngoing(true).setProgress(100, percent, false).build();
     }
-    private void download(boolean mirror) {
+    private void download(String mode) {
         try {
             repository = new ModelRepository(this);
             repository.root.mkdirs();
@@ -50,6 +51,7 @@ public final class ModelDownloadService extends Service {
             if (repository.root.getUsableSpace() < remaining + 128L * 1024 * 1024)
                 throw new IOException("存储空间不足，请至少留出 " + ((remaining / 1024 / 1024) + 128) + " MiB");
             repository.update("downloading", "", "");
+            boolean preferOfficial = false;
             for (ModelRepository.Entry entry : repository.files) {
                 checkCancelled();
                 File destination = repository.file(entry);
@@ -61,10 +63,14 @@ public final class ModelDownloadService extends Service {
                 partial.getParentFile().mkdirs();
                 if (partial.length() > entry.size && !partial.delete()) throw new IOException("无法清理未完成文件");
                 Exception failure = null;
-                for (int attempt = 0; attempt < 3; attempt++) {
+                List<String> sources = entry.asset.isEmpty() ? ModelSources.urls(entry.url, mode, preferOfficial)
+                    : java.util.Collections.singletonList("asset:" + entry.asset);
+                int attempts = sources.size() == 1 ? 3 : 4;
+                for (int attempt = 0; attempt < attempts; attempt++) {
                     checkCancelled();
                     try {
-                        if (partial.length() < entry.size) transfer(entry, partial, mirror);
+                        String source = sources.get(attempt % sources.size());
+                        if (partial.length() < entry.size) transfer(entry, partial, source);
                         repository.update("verifying", entry.path.substring(entry.path.indexOf('/') + 1), "");
                         if (partial.length() != entry.size || !ModelRepository.hash(partial).equals(entry.sha256)) {
                             if (!partial.delete()) throw new IOException("无法清理校验失败的文件");
@@ -72,10 +78,11 @@ public final class ModelDownloadService extends Service {
                         }
                         checkCancelled();
                         if (!partial.renameTo(destination)) throw new IOException("无法保存模型文件");
+                        preferOfficial = source.startsWith("https://huggingface.co/");
                         failure = null; break;
                     } catch (Exception error) {
                         checkCancelled(); failure = error;
-                        if (attempt < 2) Thread.sleep(600L * (attempt + 1));
+                        if (attempt + 1 < attempts) Thread.sleep(600L * (attempt + 1));
                     }
                 }
                 if (failure != null) throw failure;
@@ -93,8 +100,16 @@ public final class ModelDownloadService extends Service {
             new Handler(Looper.getMainLooper()).post(() -> { stopForeground(STOP_FOREGROUND_REMOVE); stopSelf(); });
         }
     }
-    private void transfer(ModelRepository.Entry entry, File partial, boolean mirror) throws Exception {
-        String source = mirror ? entry.url.replace("https://huggingface.co/", "https://hf-mirror.com/") : entry.url;
+    private void transfer(ModelRepository.Entry entry, File partial, String source) throws Exception {
+        if (source.startsWith("asset:")) {
+            repository.update("downloading", entry.path.substring(entry.path.indexOf('/') + 1), "");
+            try (InputStream input = getAssets().open(entry.asset); FileOutputStream output = new FileOutputStream(partial)) {
+                byte[] buffer = new byte[64 * 1024]; int count;
+                while ((count = input.read(buffer)) != -1) { checkCancelled(); output.write(buffer, 0, count); }
+                output.getFD().sync();
+            }
+            return;
+        }
         long offset = partial.length();
         connection = connect(source, offset);
         repository.update("downloading", entry.path.substring(entry.path.indexOf('/') + 1), "");
@@ -118,10 +133,11 @@ public final class ModelDownloadService extends Service {
             if (!url.getProtocol().equals("https")) throw new IOException("模型下载地址必须使用 HTTPS");
             HttpURLConnection socket = (HttpURLConnection) url.openConnection();
             connection = socket;
-            socket.setConnectTimeout(20000); socket.setReadTimeout(30000); socket.setInstanceFollowRedirects(false);
+            socket.setConnectTimeout(8000); socket.setReadTimeout(15000); socket.setInstanceFollowRedirects(false);
             socket.setRequestProperty("Accept-Encoding", "identity");
             if (offset > 0) socket.setRequestProperty("Range", "bytes=" + offset + "-");
-            int code = socket.getResponseCode();
+            int code;
+            try { code = socket.getResponseCode(); } catch (Exception error) { socket.disconnect(); throw error; }
             if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
                 String next = socket.getHeaderField("Location"); socket.disconnect();
                 if (next == null) throw new IOException("模型下载重定向缺少地址");

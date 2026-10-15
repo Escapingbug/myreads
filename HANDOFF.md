@@ -293,3 +293,16 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - 8 个测试文件、52 项前端测试通过，覆盖单击、长按、滑动方向、误触取消、兼容点击、搜索分页、直接暂停／继续／换段及退出。前端生产构建与 Android assembleDebug 通过。通过本机浏览器检查 320×568 和 360×640 的首页、书架及退出布局；真实手机触摸和本地提示延迟仍待用户验证。
 - 版本 0.3.10 / code15，说明 `docs/releases/0.3.10.md`；沿用用户此前明确要求的直接发布流程。预览夹具在 `artifacts/accessibility-direct/`（不提交），尚未替换模拟器里的正式 APK。
 - 已公开发布为 latest：<https://github.com/Escapingbug/myreads/releases/tag/v0.3.10>，源码 `63d289e93a311e6c237386616fc32a9d36426707`，流水线 <https://github.com/Escapingbug/myreads/actions/runs/38366131689> 全部成功，包括前端测试、Android 原生回归、调试及签名发布构建。实际公开 APK 58,845,139 bytes，SHA-256 `14bed29d08300b434f11bcbe109a24585178dd244e3089140e8161083ba3dba2`，与 update.json、SHA256SUMS、GitHub 资产摘要一致。签名与旧版一致，包名／版本正确，非调试、不含模型，已检查编译资产包含新手势及退出文案、无旧触摸选中说明。`release/` 已同步线上资产，核对报告 `artifacts/accessibility-direct/release-verification.json`。
+
+## 0.3.11 Gitee 双渠道更新与模型下载（2026-10-15）
+
+用户要求实现自动选择 Gitee / GitHub，并在注册后发布。用户已提供公开仓库 git@gitee.com:anciety/myreads.git，且已在 GitHub Actions 配置 GITEE_TOKEN。版本为 0.3.11 / code16，版本说明 docs/releases/0.3.11.md，准备按既有签名与标签发布流程公开发布。
+
+- 唯一渠道配置 `android/app/src/main/assets/distribution.json`：GitHub 为现有官方仓库，giteeRepository 已设为 anciety/myreads。前端导入与 Android assets 使用同一配置，实际 debug APK 已核对包含该地址。
+- 应用更新自动模式并行检查，单渠道整体 8 秒截止，Gitee 查询最近 100 个发行版时显式 direction=desc（Gitee 默认升序，已用公共仓库匿名 API 核实），过滤预发布、比较 Android versionCode，同版本优先 Gitee。仅版本名／版本代码／大小／SHA-256 一致时作为相互备用；同版本身份冲突停止检查。部分源离线时保留已确认的较新缓存，不能静默退到较旧镜像，继续下载也不能替换较新的已暂停 APK。
+- 原生持久化 urls、当前 source 与 versionCode；初始 URL 严格限制仓库与版本附件路径，Gitee / GitHub 各自的 CDN 白名单隔离。自动下载每源最多两次，失败轮换，HTTP Range 续传，不支持 Range 时完整重下，最终保留 APK 签名、包名、版本和 SHA-256 检查。手动固定来源对续传也生效。
+- `npm run release:gitee` 与 GitHub Actions 同步步骤：同一个签名 APK，不重复构建；检查清单、SHA256SUMS、APK 内 Gitee 配置。先创建预发布，APK / 校验文件 / update.json 依次上传并匿名下载验哈希，最后转正式。中断可重跑，不覆盖正式版本。Actions 使用 GITEE_TOKEN Secret 和可选 GITEE_TARGET_BRANCH Variable；空仓库会通过 API 创建 README 与 main 初始分支，不依赖本机 SSH 私钥。地址为空时跳过。新增 Retry Gitee release sync 手动工作流，复用 GitHub 现有发布资产，避免重新签名和重新构建。详见 `docs/distribution.md`。
+- 模型新增 auto / mirror / official；自动镜像优先，失败切官方，同次任务优先沿用成功源，每个文件按固定 revision / 大小 / SHA-256 校验，支持跨源续传。旧 mirror 布尔偏好保留为显式对应来源，用户可切自动。
+- 为消除模型最后一个文件的 GitHub 依赖，把固定提交的 Silero VAD（1,289,603 bytes）随 APK 提供，在模型安装时本地复制并校验。使用原清单固定 SHA-256，许可证已有且补充 THIRD_PARTY_NOTICES。13 个目标文件、模型 ID、revision 与所有文件哈希保持不变，已有模型无需重下；大型 MOSS 模型仍不随 APK 分发，也不上传 Gitee。
+- 验证：79 项前端／发布工具测试、76 项 Android 原生测试通过；生产构建、Capacitor 同步、Android testDebugUnitTest / assembleDebug 通过。检查实际 debug APK 内 anciety/myreads 配置与内置 VAD 原始大小／SHA-256 正确。未安装 debug APK，未改动模拟器里的正式版或用户数据。
+- 尚待实际 Gitee 仓库的匿名发布列表、清单／APK 下载、CDN 跳转、Range 与真实覆盖安装验证；没有凭模拟接口宣称双渠道已经上线。已收到仓库地址与凭据配置确认，将继续公开发布与实际校验。

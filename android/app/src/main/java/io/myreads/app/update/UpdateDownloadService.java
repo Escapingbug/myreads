@@ -50,21 +50,22 @@ public final class UpdateDownloadService extends Service {
         try {
             store = new UpdateStore(this);
             JSONObject data = store.metadata(); store.validate(data);
-            for (int attempt = 0; ; attempt++) {
-                checkCancelled();
+            UpdateSources.download(UpdateStore.urls(data), source -> {
                 try {
-                    if (store.partial.length() < data.getLong("size")) transfer(data);
+                    store.prefs.edit().putString("source", UpdatePolicy.source(source)).commit();
+                    if (store.partial.length() < data.getLong("size")) transfer(data, source);
                     store.phase("verifying", ""); store.verify(store.partial); checkCancelled();
                     UpdateStore.remove(store.apk);
                     if (!store.partial.renameTo(store.apk)) throw new IOException("无法保存安装包");
-                    store.phase("ready", ""); ready = true; break;
+                    store.phase("ready", "");
                 } catch (Exception error) {
                     checkCancelled();
                     if (store.partial.length() >= data.getLong("size")) UpdateStore.remove(store.partial);
-                    if (attempt >= 2) throw error;
-                    store.phase("downloading", ""); Thread.sleep(700L * (attempt + 1));
+                    store.phase("downloading", "");
+                    throw error;
                 }
-            }
+            }, this::checkCancelled);
+            ready = true;
         } catch (InterruptedException error) {
             if (store != null) store.phase("paused", "");
         } catch (Exception error) {
@@ -81,9 +82,9 @@ public final class UpdateDownloadService extends Service {
             });
         }
     }
-    private void transfer(JSONObject data) throws Exception {
+    private void transfer(JSONObject data, String source) throws Exception {
         long offset = store.partial.length();
-        connection = connect(data.getString("url"), offset);
+        connection = connect(source, offset);
         store.phase("downloading", "");
         try {
             ResumableTransfer.write(connection, store.partial, data.getLong("size"), this::checkCancelled, () -> {
@@ -99,14 +100,16 @@ public final class UpdateDownloadService extends Service {
     }
     private HttpURLConnection connect(String source, long offset) throws Exception {
         URI uri = URI.create(source);
+        String sourceHost = uri.getHost();
         for (int redirects = 0; redirects <= 6; redirects++) {
             checkCancelled();
-            if (!UpdatePolicy.allowedRedirect(uri)) throw new IOException("更新下载地址无效");
+            if (!UpdatePolicy.allowedRedirect(uri, sourceHost)) throw new IOException("更新下载地址无效");
             HttpURLConnection socket = (HttpURLConnection) uri.toURL().openConnection(); connection = socket;
-            socket.setConnectTimeout(15000); socket.setReadTimeout(30000); socket.setInstanceFollowRedirects(false);
+            socket.setConnectTimeout(8000); socket.setReadTimeout(15000); socket.setInstanceFollowRedirects(false);
             socket.setRequestProperty("User-Agent", "Zijian-Updater"); socket.setRequestProperty("Accept-Encoding", "identity");
             if (offset > 0) socket.setRequestProperty("Range", "bytes=" + offset + "-");
-            int code = socket.getResponseCode();
+            int code;
+            try { code = socket.getResponseCode(); } catch (Exception error) { socket.disconnect(); throw error; }
             if (code == 301 || code == 302 || code == 303 || code == 307 || code == 308) {
                 String location = socket.getHeaderField("Location"); socket.disconnect();
                 if (location == null) throw new IOException("更新下载重定向缺少地址");

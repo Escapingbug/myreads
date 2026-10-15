@@ -16,11 +16,16 @@ public final class ResumableTransfer {
         try (InputStream input = new BufferedInputStream(connection.getInputStream());
              FileOutputStream output = new FileOutputStream(partial, offset > 0)) {
             byte[] buffer = new byte[256 * 1024]; int count;
-            long received = offset;
+            long received = offset, windowBytes = offset, windowStart = System.nanoTime();
             while ((count = input.read(buffer)) != -1) {
                 check.run(); received += count;
                 if (received > expectedSize) throw new IOException("文件大小与清单不符");
                 output.write(buffer, 0, count); progress.update();
+                long now = System.nanoTime();
+                if (now - windowStart >= 60_000_000_000L) {
+                    if (received - windowBytes < 64 * 1024) throw new IOException("下载速度过慢，正在尝试其他来源");
+                    windowStart = now; windowBytes = received;
+                }
             }
             output.getFD().sync();
         }

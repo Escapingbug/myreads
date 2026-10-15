@@ -38,9 +38,20 @@ describe("local listening", () => {
   });
   it("downloads only after an explicit action and forwards selected source", async () => {
     const tts = await import("../src/services/tts");
-    await tts.initializeTts(); tts.tts.mirror = true;
+    await tts.initializeTts(); tts.tts.modelSource = "mirror";
     await tts.downloadModel();
-    expect(mocks.native.downloadModel).toHaveBeenCalledWith({ mirror: true });
+    expect(mocks.native.downloadModel).toHaveBeenCalledWith({ source: "mirror" });
+  });
+  it("defaults to automatic model download and persists that choice", async () => {
+    const service = await import("../src/services/tts"); await service.initializeTts();
+    expect(service.tts.modelSource).toBe("auto"); await service.downloadModel();
+    expect(mocks.native.downloadModel).toHaveBeenCalledWith({ source: "auto" });
+    expect(JSON.parse(mocks.preferences.set.mock.calls[0]![0].value).modelSource).toBe("auto");
+  });
+  it.each([[true, "mirror"], [false, "official"]])("preserves legacy source selection %s", async (mirror, source) => {
+    mocks.preferences.get.mockResolvedValue({ value: JSON.stringify({ mirror }) });
+    const service = await import("../src/services/tts"); await service.initializeTts();
+    expect(service.tts.modelSource).toBe(source);
   });
   it("passes only committed download flags and preserves the chosen starting paragraph", async () => {
     const tts = await import("../src/services/tts");

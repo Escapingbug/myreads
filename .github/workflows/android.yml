@@ -88,6 +88,11 @@ jobs:
           test -f "$NOTES"
           gh release create "$GITHUB_REF_NAME" release/zijian-*.apk release/update.json release/SHA256SUMS --draft --verify-tag --title "纸间 $GITHUB_REF_NAME" --notes-file "$NOTES"
           gh release edit "$GITHUB_REF_NAME" --draft=false --latest
+      - name: Mirror complete release to Gitee when configured
+        env:
+          GITEE_TOKEN: ${{ secrets.GITEE_TOKEN }}
+          GITEE_TARGET_BRANCH: ${{ vars.GITEE_TARGET_BRANCH }}
+        run: npm run release:gitee -- "$GITHUB_REF_NAME" --if-configured
       - name: Clean signing key
         if: always()
         run: rm -f "$RUNNER_TEMP/zijian.keystore"

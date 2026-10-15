@@ -30,10 +30,11 @@ const labels = { missing: "尚未下载", downloading: "正在下载", verifying
     <p v-if="!tts.supported" class="inline-message">在 Android App 中下载并使用本地听书。</p>
     <div v-if="tts.model.phase !== 'ready'" class="listen-download-source">
       <label for="model-download-source">下载来源</label>
-      <select id="model-download-source" v-model="tts.mirror" :disabled="downloading" @change="ttsAction(saveTtsOptions)">
-        <option :value="false">官方 Hugging Face</option><option :value="true">HF 国内镜像</option>
+      <select id="model-download-source" v-model="tts.modelSource" :disabled="downloading" @change="ttsAction(saveTtsOptions)">
+        <option value="auto">自动（国内镜像优先）</option><option value="mirror">HF 国内镜像</option><option value="official">官方 Hugging Face</option>
       </select>
     </div>
+    <p v-if="tts.model.phase !== 'ready' && tts.modelSource === 'auto'" class="muted">连接失败会自动切换来源，已下载的进度会保留。</p>
     <div class="download-actions">
       <button v-if="downloading" class="button secondary" :disabled="tts.busy" @click="ttsAction(pauseModelDownload)"><Pause :size="17" />暂停下载</button>
       <button v-else-if="tts.model.phase !== 'ready'" class="button" :disabled="!tts.supported || tts.busy || !tts.initialized" @click="ttsAction(downloadModel)">

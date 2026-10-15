@@ -45,7 +45,7 @@ public final class UpdatePlugin extends Plugin {
         files.execute(() -> {
             try {
                 if (!UpdateDownloadService.running) {
-                    UpdateStore store = new UpdateStore(getContext()); store.prepare(call.getData().has("url") ? call.getData() : store.metadata());
+                    UpdateStore store = new UpdateStore(getContext()); store.prepare(call.getData().has("url") ? call.getData() : store.metadata(), call.getString("sourcePreference", "auto"));
                     UpdateDownloadService.running = true;
                     try { ContextCompat.startForegroundService(getContext(), new Intent(getContext(), UpdateDownloadService.class)); }
                     catch (Exception error) { UpdateDownloadService.running = false; store.phase("error", error.getMessage()); throw error; }

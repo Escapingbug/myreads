@@ -42,7 +42,10 @@ public final class ZijianTtsPlugin extends Plugin {
                 ModelRepository repository = new ModelRepository(getContext());
                 if (!repository.ready() && !ModelDownloadService.running) {
                     Intent intent = new Intent(getContext(), ModelDownloadService.class);
-                    intent.putExtra("mirror", Boolean.TRUE.equals(call.getBoolean("mirror", false)));
+                    String source = call.getString("source", call.getData().has("mirror")
+                        ? (Boolean.TRUE.equals(call.getBoolean("mirror", false)) ? "mirror" : "official") : "auto");
+                    ModelSources.urls("https://huggingface.co/model", source, false);
+                    intent.putExtra("source", source);
                     ContextCompat.startForegroundService(getContext(), intent);
                 }
                 call.resolve();

@@ -28,7 +28,7 @@ final class ModelRepository {
         long size = 0;
         for (int i = 0; i < array.length(); i++) {
             JSONObject item = array.getJSONObject(i);
-            Entry entry = new Entry(item.getString("path"), item.getString("url"), item.getLong("size"), item.getString("sha256"));
+            Entry entry = new Entry(item.getString("path"), item.getString("url"), item.getLong("size"), item.getString("sha256"), item.optString("asset", ""));
             files.add(entry); size += entry.size;
         }
         total = size;
@@ -86,9 +86,9 @@ final class ModelRepository {
         return result.toString();
     }
     static final class Entry {
-        final String path, url, sha256; final long size;
-        Entry(String path, String url, long size, String sha256) {
-            this.path = path; this.url = url; this.size = size; this.sha256 = sha256;
+        final String path, url, sha256, asset; final long size;
+        Entry(String path, String url, long size, String sha256, String asset) {
+            this.path = path; this.url = url; this.size = size; this.sha256 = sha256; this.asset = asset;
         }
     }
 }

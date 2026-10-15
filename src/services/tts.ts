@@ -12,6 +12,7 @@ export interface ModelStatus {
   file: string;
   error: string;
 }
+export type ModelSource = "auto" | "mirror" | "official";
 export type PreparationMode = "stream" | "chapter";
 export interface PlaybackStatus {
   phase: "idle" | "loading" | "buffering" | "playing" | "paused" | "completed" | "error";
@@ -35,7 +36,7 @@ export interface PlaybackStatus {
 }
 interface TtsPlugin {
   getStatus(): Promise<{ model: ModelStatus; playback: PlaybackStatus }>;
-  downloadModel(options: { mirror: boolean }): Promise<void>;
+  downloadModel(options: { source: ModelSource }): Promise<void>;
   pauseDownload(): Promise<void>;
   removeModel(): Promise<void>;
   play(options: {
@@ -62,7 +63,7 @@ export const tts = reactive({
   error: "",
   voice: "Junhao",
   speed: 1,
-  mirror: false,
+  modelSource: "auto" as ModelSource,
   mode: "stream" as PreparationMode,
   continuity: true,
   model: {
@@ -100,7 +101,8 @@ export async function initializeTts() {
         const values = JSON.parse(saved.value);
         if (voices.some((voice) => voice.id === values.voice)) tts.voice = values.voice;
         if (typeof values.speed === "number" && Number.isFinite(values.speed)) tts.speed = Math.max(0.5, Math.min(2, values.speed));
-        tts.mirror = values.mirror === true;
+        if (["auto", "mirror", "official"].includes(values.modelSource)) tts.modelSource = values.modelSource;
+        else if (typeof values.mirror === "boolean") tts.modelSource = values.mirror ? "mirror" : "official";
         tts.continuity = values.continuity !== false;
         // Older automatic mode could wait for the entire chapter after one slow
         // sample. Migrate it to immediate streaming; preserve explicit chapter mode.
@@ -128,7 +130,7 @@ export async function refreshTts() {
 }
 export async function saveTtsOptions() {
   const { Preferences } = await import("@capacitor/preferences");
-  await Preferences.set({ key: "tts-options", value: JSON.stringify({ voice: tts.voice, speed: tts.speed, mirror: tts.mirror, mode: tts.mode, continuity: tts.continuity }) });
+  await Preferences.set({ key: "tts-options", value: JSON.stringify({ voice: tts.voice, speed: tts.speed, modelSource: tts.modelSource, mode: tts.mode, continuity: tts.continuity }) });
   if (tts.supported && tts.playback.phase !== "idle") await native.control({ action: "speed", speed: tts.speed });
 }
 export async function ttsAction(action: () => Promise<unknown>) {
@@ -140,7 +142,7 @@ export async function ttsAction(action: () => Promise<unknown>) {
 export async function downloadModel() {
   if (!tts.supported) throw new Error("请在 Android App 中下载听书模型");
   await saveTtsOptions();
-  await native.downloadModel({ mirror: tts.mirror });
+  await native.downloadModel({ source: tts.modelSource });
   await refreshTts();
 }
 export async function pauseModelDownload() { await native.pauseDownload(); }
