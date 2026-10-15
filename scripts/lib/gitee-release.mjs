@@ -75,7 +75,7 @@ export async function publishGitee({ repository, token, tag, targetCommitish, no
     console.log(`正在匿名校验 ${file.name}`);
     await verifyPublicFile(releaseFile(repository, tag, file.name), file, fetcher);
   }
-  if (release.prerelease) await api(`/releases/${release.id}`, 'PATCH', { name: `纸间 ${tag}`, body: notes, prerelease: false });
+  if (release.prerelease) await api(`/releases/${release.id}`, 'PATCH', { tag_name: tag, name: `纸间 ${tag}`, body: notes, prerelease: false });
   const publicRelease = await fetcher(`${base}/releases/tags/${tag}`, { redirect: 'error', signal: AbortSignal.timeout(15_000) });
   if (publicRelease.status !== 200) throw new Error('发布后无法匿名读取 Gitee 发行版');
   const published = await publicRelease.json();

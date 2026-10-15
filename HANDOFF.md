@@ -314,3 +314,5 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - Gitee 第二次同步（run38711522758）小型 SHA256SUMS 已上传且匿名下载校验成功，实际 CDN 为 foruda.gitee.com，符合应用白名单。APK 上传仍触发 Undici 内部固定 300 秒 HeadersTimeoutError；外层 15 分钟 AbortSignal 不能覆盖该限制。发布 CLI 改用 Node 原生 HTTPS 发送带明确 Content-Length 的 multipart，保留单独 15 分钟总时限及凭据仅存内存；继续复用同一 GitHub APK，不改动已发布安装包。
 
 - 原生 HTTPS 重试 run38712511349 的 APK 上传仍长期不返回，改用 curl（自动协商 HTTP/2、独立总时限、输出 HTTP/发送字节/耗时诊断）。鉴权放入 CI 私有临时文件（0600，目录0700），不进入进程参数，操作后清理；元数据仍使用 fetch。手动同步工作流新增 ubuntu / macos 运行环境选择用于排查上传网络，全程不使用模拟器。
+
+- 云端大型 APK 上传多次停滞后，使用用户已有 Gitee 浏览器会话的网页附件表单上传同一签名 APK 成功，已取消悬挂云端任务。随后云端 run38714900908 完整验证 APK 与 SHA256SUMS、上传并验证 update.json 均成功；转正式的 PATCH 因缺少必填 tag_name 返回400。已依据官方 ReleasesIdBody 文档补齐该字段，并增加回归断言，继续重跑完成公开发布。没有更改已公开 APK。

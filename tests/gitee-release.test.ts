@@ -38,7 +38,7 @@ function server({ existing = false, published = false, corrupt = "", failUpload 
         if (name === failUpload) return new Response(null, { status: 500 });
         attachments.push({ name }); return Response.json({ name });
       }
-      if (method === "PATCH") { stable = true; mutations.push("publish"); return Response.json(release()); }
+      if (method === "PATCH") { expect(JSON.parse(options.body as string).tag_name).toBe(tag); stable = true; mutations.push("publish"); return Response.json(release()); }
     }
     if (url.includes("/attach_files?")) return Response.json(attachments);
     return created ? Response.json(release()) : new Response(null, { status: 404 });
