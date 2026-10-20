@@ -364,6 +364,11 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - 浏览器真实推荐页及播放状态夹具检查320×480 / 320×568 / 360×640 / 412×840 / 568×320，含顶部30px/底部40px占位，无按钮溢出/操作区滚动。夹具以真实IndexedDB、书源Worker和章节下载配合模拟TTS状态，验证一键准备后到播放页、暂停、页面重新进入自动继续和再换推荐；夹具不实际合成或播放声音，不能作为真机音频验证。文件在 artifacts/recommendations/。
 - 全程未使用模拟器/ADB。实体设备听感、本地提示时延、后台连续播放仍待验证；没有修改App版本、提交/推送或发布。实现说明 docs/recommendations.md，README标记开发中尚未发布。
 
-## 0.3.12 发布准备（2026-10-20）
+## 0.3.12 发布完成（2026-10-20）
 
 用户明确授权按当前实现发布。App 版本递增为 0.3.12 / code17，版本说明 docs/releases/0.3.12.md，README 与推荐说明已同步。包含本次锁屏恢复、无障碍适配、可见搜书和推荐/简单听书全部改动。126 项前端测试和生产构建/Capacitor 同步通过；沿用 GitHub Actions 原签名及 GitHub/Gitee 双渠道流程。发布与验证禁止模拟器/ADB，真实音频/偶发锁屏仍保留真机验证边界。后续记录以本节发布结果为准。
+
+- GitHub 正式 latest：<https://github.com/Escapingbug/myreads/releases/tag/v0.3.12>；Gitee 正式最新版：<https://gitee.com/anciety/myreads/releases/tag/v0.3.12>（id1222500 / prerelease=false）。源码标签提交 `5c86cebebc9ed14a8eaf89b1cdbefd7fd60e8c44`。
+- 126 项前端测试、76 项 Android 主机测试、生产构建、Capacitor 同步与调试 APK 构建通过；主分支完整验证 <https://github.com/Escapingbug/myreads/actions/runs/39392378971> 成功。标签流水线 <https://github.com/Escapingbug/myreads/actions/runs/39392378672> 的验证、签名构建及 GitHub 发布成功，仅 Gitee 连接超时失败。macOS 重试能创建预发布，但附件连接仍超时；使用用户现有 Gitee 网页会话上传 GitHub 的同一 APK / update.json / SHA256SUMS 后，最终同步 <https://github.com/Escapingbug/myreads/actions/runs/39393707977> 逐项匿名验证并转正式成功。没有重新构建或替换已发布 APK。
+- 两渠道匿名下载的完整 APK 为 59,941,870 bytes，SHA-256 `af548701187ddebec31f39e6ab94a138cd70f2c508a6af61c64388c5c8b4a09a`；公开清单、校验文件和 GitHub 资产摘要一致。签名验证通过，与 0.3.11 证书一致：`a0abb5c432d5ada068efe059a63c1ec4adef40754a915559e0520538124c1112`。包名 io.myreads.app、versionCode17、非调试、arm64-v8a / x86_64；静态确认推荐/简单听书、搜索表单、阅读会话与原生渲染恢复进入正式包，两个内置书源为 1.1.0，模型目录与 VAD 文件和旧版逐字节一致，没有随包分发大型模型。
+- 使用实际应用更新模块读取匿名线上两渠道元数据与清单，识别 0.3.12 / code17，自动选择 Gitee，GitHub 作为相同大小/哈希 APK 的备用 URL。实际文件及验证记录保存在 `release/`、`artifacts/release-0.3.12/verification.json`、`live-update-logic.json` 与 `gitee-published.png`（均不提交）。全程未使用模拟器、ADB 或安装应用；实体设备音频、后台连续播放和偶发锁屏恢复仍待真机验证。
