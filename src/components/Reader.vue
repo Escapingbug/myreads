@@ -19,13 +19,17 @@ import {
 import type { Book, ChapterContent } from "../types";
 import { storage } from "../services/storage";
 import { state, saveProgress, saveSettings } from "../services/library";
+import { checkpointReader, readReaderSession } from "../services/reader-session";
 import ListeningSettings from "./ListeningSettings.vue";
 import { tts, listeningMessage, ttsAction, startListening, controlListening, syncListeningProgress } from "../services/tts";
 const props = defineProps<{ book: Book }>();
 const emit = defineEmits<{ close: []; error: [message: string] }>();
+const session = readReaderSession();
+const bookmark = session?.bookId === props.book.localId
+  && props.book.downloaded.includes(session.chapterId) ? session : props.book.progress;
 const savedIndex = props.book.chapters.findIndex(
   (ch) =>
-    ch.id === props.book.progress?.chapterId &&
+    ch.id === bookmark?.chapterId &&
     props.book.downloaded.includes(ch.id),
 );
 const initialIndex =
@@ -52,11 +56,58 @@ const chapter = computed(() => props.book.chapters[index.value]);
 const settings = computed(() => state.settings);
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 let position = {
-  paragraph: props.book.progress?.paragraph ?? 0,
-  offset: props.book.progress?.offset ?? 0,
+  paragraph: bookmark?.paragraph ?? 0,
+  offset: bookmark?.offset ?? 0,
 };
 let loadSerial = 0;
 let restoring = false;
+let suspended = document.hidden;
+let resumeFrame: number | undefined;
+let layoutObserver: ResizeObserver | undefined;
+let waitingForLayout = false;
+function checkpoint() {
+  if (listening.value) {
+    const audioChapter = props.book.chapters[tts.playback.chapter ?? index.value];
+    if (audioChapter) checkpointReader(props.book, audioChapter.id, { paragraph: tts.playback.paragraph ?? 0, offset: 0 });
+  } else if (chapter.value && content.value) checkpointReader(props.book, chapter.value.id, position);
+}
+function restorePosition() {
+  const root = scrollRoot.value;
+  if (!root || root.clientHeight <= 0 || document.hidden || suspended) return false;
+  const paragraph = root.querySelector<HTMLElement>(`[data-paragraph="${position.paragraph}"]`);
+  root.scrollTop = paragraph && (position.paragraph > 0 || position.offset > 0)
+    ? paragraph.getBoundingClientRect().top - root.getBoundingClientRect().top
+      + root.scrollTop - 100 + position.offset * paragraph.offsetHeight
+    : 0;
+  return true;
+}
+function suspend() {
+  suspended = true;
+  if (resumeFrame !== undefined) cancelAnimationFrame(resumeFrame);
+  resumeFrame = undefined;
+  if (saveTimer) clearTimeout(saveTimer);
+  saveTimer = undefined;
+  checkpoint();
+  return persist();
+}
+async function resume() {
+  suspended = false;
+  restoring = true;
+  await nextTick();
+  if (suspended) return;
+  if (resumeFrame !== undefined) cancelAnimationFrame(resumeFrame);
+  resumeFrame = requestAnimationFrame(() => {
+    resumeFrame = undefined;
+    waitingForLayout = !restorePosition();
+    restoring = waitingForLayout;
+    if (!waitingForLayout) onScroll();
+  });
+}
+function visibilityChanged() {
+  if (document.hidden) void suspend().catch((error) => emit("error", (error as Error).message));
+  else void resume();
+}
+function pageShown() { void resume(); }
 async function loadChapter(next: number, restore = false, fromAudio = false) {
   if (next < 0 || next >= props.book.chapters.length) return;
   const ref = props.book.chapters[next]!;
@@ -91,29 +142,14 @@ async function loadChapter(next: number, restore = false, fromAudio = false) {
     content.value = saved;
     if (fromAudio) position = { paragraph: tts.playback.paragraph ?? 0, offset: 0 };
     else if (!restore) position = { paragraph: 0, offset: 0 };
+    checkpoint();
     restoring = true;
     loading.value = false;
     await nextTick();
     if (serial !== loadSerial) return;
-    const root = scrollRoot.value;
-    const paragraph = root?.querySelector<HTMLElement>(
-      `[data-paragraph="${position.paragraph}"]`,
-    );
-    if (
-      root &&
-      paragraph &&
-      (restore || fromAudio) &&
-      (position.paragraph > 0 || position.offset > 0)
-    )
-      root.scrollTop =
-        paragraph.getBoundingClientRect().top -
-        root.getBoundingClientRect().top +
-        root.scrollTop -
-        100 +
-        position.offset * paragraph.offsetHeight;
-    else if (root) root.scrollTop = 0;
-    restoring = false;
-    onScroll();
+    waitingForLayout = !restorePosition();
+    restoring = waitingForLayout;
+    if (!waitingForLayout) onScroll();
   } catch (error) {
     if (serial === loadSerial) {
       failure.value = (error as Error).message;
@@ -124,7 +160,7 @@ async function loadChapter(next: number, restore = false, fromAudio = false) {
 }
 function onScroll() {
   const root = scrollRoot.value;
-  if (!root || loading.value || restoring || !content.value) return;
+  if (!root || root.clientHeight <= 0 || document.hidden || suspended || loading.value || restoring || !content.value) return;
   const boundary = root.getBoundingClientRect().top + 100;
   const paragraphs = [
     ...root.querySelectorAll<HTMLElement>("[data-paragraph]"),
@@ -153,6 +189,7 @@ function onScroll() {
             (root.scrollTop / (root.scrollHeight - root.clientHeight)) * 100,
           ),
         );
+  checkpoint();
   if (saveTimer) clearTimeout(saveTimer);
   if (listening.value) return;
   saveTimer = setTimeout(() => {
@@ -220,17 +257,30 @@ watch(() => [tts.playback.bookId, tts.playback.chapter, tts.playback.paragraph],
     if (root && element) root.scrollTo({ top: element.offsetTop - 100, behavior: "smooth" });
   }
 });
-defineExpose({ handleBack, persist });
+defineExpose({ handleBack, persist, suspend, resume });
 onMounted(() => {
   document.body.style.overflow = "hidden";
   window.addEventListener("keydown", key);
+  document.addEventListener("visibilitychange", visibilityChanged);
+  window.addEventListener("pageshow", pageShown);
+  if (typeof ResizeObserver !== "undefined" && scrollRoot.value) {
+    layoutObserver = new ResizeObserver(() => {
+      if (waitingForLayout && !suspended && !document.hidden && scrollRoot.value?.clientHeight) void resume();
+    });
+    layoutObserver.observe(scrollRoot.value);
+  }
   const audioIndex = listening.value ? tts.playback.chapter : undefined;
   void loadChapter(audioIndex ?? initialIndex, true, audioIndex !== undefined);
 });
 onBeforeUnmount(() => {
   ++loadSerial;
+  suspended = true;
+  if (resumeFrame !== undefined) cancelAnimationFrame(resumeFrame);
+  layoutObserver?.disconnect();
   document.body.style.overflow = "";
   window.removeEventListener("keydown", key);
+  document.removeEventListener("visibilitychange", visibilityChanged);
+  window.removeEventListener("pageshow", pageShown);
   if (saveTimer) clearTimeout(saveTimer);
   void persist().catch((error) => emit("error", (error as Error).message));
 });
@@ -277,7 +327,10 @@ onBeforeUnmount(() => {
         </div>
         <h1>{{ chapter?.title }}</h1>
         <div v-if="loading" class="reader-placeholder">正在打开本地章节…</div>
-        <div v-else-if="failure" class="reader-placeholder">{{ failure }}</div>
+        <div v-else-if="failure" class="reader-placeholder" role="alert">
+          <p>{{ failure }}</p>
+          <button class="button secondary" @click.stop="loadChapter(index, true)">重新打开本章</button>
+        </div>
         <template v-else
           ><p
             v-for="(paragraph, i) in content?.paragraphs"

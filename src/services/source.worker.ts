@@ -71,6 +71,7 @@ channel.onmessage = async ({ data }) => {
       : request.resolve(data.text);
   } else if (data.kind === "call") {
     try {
+      if (typeof source[data.method as SourceMethod] !== "function") throw new Error("当前书源不支持推荐，请更新书源或使用搜索");
       channel.postMessage({
         kind: "result",
         id: data.id,

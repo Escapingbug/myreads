@@ -6,6 +6,7 @@ export interface SourceManifest {
   description: string;
   author?: string;
   domains: string[];
+  capabilities?: ("recommend")[];
 }
 export interface SourcePackage {
   manifest: SourceManifest;
@@ -73,7 +74,7 @@ export interface ReaderSettings {
   lineHeight: number;
   theme: "paper" | "white" | "night";
 }
-export type SourceMethod = "search" | "getBook" | "getChapters" | "getChapter";
+export type SourceMethod = "search" | "recommend" | "getBook" | "getChapters" | "getChapter";
 export interface RequestOptions {
   url: string;
   method?: "GET" | "POST";

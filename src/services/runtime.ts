@@ -211,7 +211,7 @@ export function validateResult(method: SourceMethod, value: unknown): unknown {
   return {
     nextCursor: page.nextCursor,
     items:
-      method === "search"
+      method === "search" || method === "recommend"
         ? page.items.map(book)
         : page.items.map((value) => {
             const chapter = value as ChapterRef;

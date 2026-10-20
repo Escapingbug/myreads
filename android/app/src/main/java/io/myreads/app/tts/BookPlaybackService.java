@@ -191,9 +191,11 @@ public final class BookPlaybackService extends MediaSessionService {
                 check(token);
                 history.clear();
                 JSONObject reference = chapters.getJSONObject(ch);
-                if (!reference.getBoolean("downloaded")) break;
                 awaitBuffer(token, gate, buffer.aheadMs(speed));
                 File contentFile = new File(getFilesDir(), "books/" + activeBook + "/" + ch + ".json");
+                // Chapters may finish downloading after playback started. Atomic
+                // chapter files, rather than the startup snapshot, decide availability.
+                if (!reference.getBoolean("downloaded") && !contentFile.isFile()) break;
                 if (!contentFile.isFile() || contentFile.length() > 4 * 1024 * 1024) throw new IOException("本地章节缺失，请重新下载这一章");
                 JSONArray paragraphs = new JSONObject(LocalTtsFiles.text(contentFile)).getJSONArray("paragraphs");
                 int first = ch == startChapter ? Math.min(startParagraph, Math.max(0, paragraphs.length() - 1)) : 0;

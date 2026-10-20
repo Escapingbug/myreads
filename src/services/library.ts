@@ -1,4 +1,4 @@
-import { reactive } from "vue";
+import { reactive, watch } from "vue";
 import type {
   Book,
   ChapterRef,
@@ -13,6 +13,7 @@ import type {
 import { storage } from "./storage";
 import { SourceRuntime } from "./runtime";
 import { validatePackage } from "./packages";
+import { upgradeBundledSources } from "./bundled-sources";
 
 export const state = reactive({
   initialized: false,
@@ -49,6 +50,7 @@ export async function initialize() {
     }
     await storage.put("settings:bootstrapped", true);
   }
+  await upgradeBundledSources(state.sources, installSource);
   state.initialized = true;
 }
 export async function installSource(pack: SourcePackage) {
@@ -208,6 +210,57 @@ export async function removeBook(book: Book) {
   state.books = state.books.filter((item) => item.localId !== book.localId);
 }
 let pumping = false;
+let preferredDownload = "";
+export async function prepareListeningBook(source: InstalledSource, ref: SourceBook, signal: AbortSignal): Promise<Book> {
+  signal.throwIfAborted();
+  let book: Book | undefined;
+  const cancel = () => {
+    cancelCatalogue();
+    if (book) void pauseBook(book).catch(() => {});
+  };
+  signal.addEventListener("abort", cancel, { once: true });
+  try {
+    book = await addDownload(source, ref);
+    if (signal.aborted) { cancel(); signal.throwIfAborted(); }
+    const chapter = book.chapters.find((chapter) => chapter.id === book!.progress?.chapterId) ?? book.chapters[0];
+    if (!chapter) throw new Error("这本书还没有可听的章节，请换一本");
+    if (book.downloaded.includes(chapter.id)) return book;
+    book.downloadPriority = chapter.id;
+    await storage.saveBook(book);
+    signal.throwIfAborted();
+    preferredDownload = book.localId;
+    const previous = state.books.find((entry) => entry.localId === state.activeDownload && entry.localId !== book!.localId);
+    if (previous) await pauseBook(previous);
+    signal.throwIfAborted();
+    await resumeBook(book);
+    if (previous) await resumeBook(previous);
+    signal.throwIfAborted();
+    const target = book;
+    await new Promise<void>((resolve, reject) => {
+      let stop = () => {};
+      const finish = (error?: Error) => {
+        stop(); clearTimeout(timer); signal.removeEventListener("abort", abort);
+        error ? reject(error) : resolve();
+      };
+      const abort = () => finish(new DOMException("操作已取消", "AbortError"));
+      const timer = setTimeout(() => { void pauseBook(target).catch(() => {}); finish(new Error("准备时间较长，请重试或换一本")); }, 60000);
+      signal.addEventListener("abort", abort, { once: true });
+      const inspect = () => {
+        if (signal.aborted) finish(new DOMException("操作已取消", "AbortError"));
+        else if (target.downloaded.includes(chapter.id)) finish();
+        else if (["error", "paused", "ready"].includes(target.state)) finish(new Error(target.error || "章节尚未准备好，请重试或换一本"));
+      };
+      stop = watch(() => [target.downloaded.length, target.state], inspect, { flush: "sync" });
+      inspect();
+    });
+    signal.throwIfAborted();
+    return book;
+  } finally {
+    signal.removeEventListener("abort", cancel);
+    if (book?.localId === preferredDownload) preferredDownload = "";
+  }
+}
+
 function startPump() {
   void pump().catch((error) => {
     state.error = (error as Error).message;
@@ -229,7 +282,8 @@ async function pump() {
   pumping = true;
   try {
     let next: Book | undefined;
-    while ((next = state.books.find((book) => book.state === "queued")))
+    while ((next = state.books.find((book) => book.localId === preferredDownload && book.state === "queued")
+      ?? state.books.find((book) => book.state === "queued")))
       await downloadBook(next);
   } finally {
     pumping = false;

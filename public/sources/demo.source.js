@@ -15,6 +15,7 @@ const prose = [
   '信纸铺开以后，反而不知道先写什么。于是我写：“今天过得很普通，但我想把它告诉你。”写到这里，剩下的话便慢慢出现了。'
 ];
 const source = {
+  async recommend() { return { items: books }; },
   async search(keyword) { return { items: books.filter(b => !keyword || `${b.title}${b.author}${b.category}`.includes(keyword)) }; },
   async getBook(ref) { const book = books.find(b => b.id === ref.id); if (!book) throw Error('书籍不存在'); return book; },
   async getChapters(ref) { return { items: titles.map((title,i) => ({ id: `${ref.id}:${i}`, title: `第${i+1}章 ${title}` })) }; },

@@ -6,6 +6,8 @@ const manifests = {
 };
 for (const [name, manifest] of Object.entries(manifests)) {
   const script = fs.readFileSync(`public/sources/${name}.source.js`, 'utf8');
+  manifest.version = '1.1.0';
+  manifest.capabilities = ['recommend'];
   fs.writeFileSync(`public/sources/${name}.booksource`, JSON.stringify({manifest, script}, null, 2));
   fs.writeFileSync(`public/sources/${name}.zip`, zipSync({'manifest.json': strToU8(JSON.stringify(manifest,null,2)), 'source.js': strToU8(script)}));
 }

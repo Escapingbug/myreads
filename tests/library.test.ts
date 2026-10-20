@@ -52,6 +52,7 @@ import {
   removeBook,
   resumeBook,
   saveProgress,
+  prepareListeningBook,
   state,
   uninstallSource,
 } from "../src/services/library";
@@ -91,6 +92,37 @@ beforeEach(async () => {
   await installSource(source);
 });
 describe("下载、本地持久化与恢复", () => {
+  it("一键开听只等待要听的章节，剩余章节继续下载", async () => {
+    const book = await prepareListeningBook(source, ref, new AbortController().signal);
+    expect(book.downloaded).toContain("0");
+    expect(book.downloaded.length).toBeLessThan(4);
+    expect(await storage.chapter(book.localId, 0)).toEqual({ paragraphs: ["章节0正文"] });
+    await wait(() => book.state === "ready");
+  });
+  it("一键续听自动准备原来的章节，已有章节不重复请求", async () => {
+    const book = await addDownload(source, ref); await wait(() => book.state === "ready");
+    await saveProgress(book, "2", 3, 0); control.requests = [];
+    expect(await prepareListeningBook(source, ref, new AbortController().signal)).toBe(book);
+    expect(control.requests).toEqual([]);
+    await removeBook(book); control.requests = [];
+    const restored = await prepareListeningBook(source, ref, new AbortController().signal);
+    expect(control.requests[0]).toBe("2"); expect(restored.downloaded).toContain("2");
+    expect(restored.progress?.paragraph).toBe(3);
+  });
+  it("推荐准备期间取消会停止等待与当前下载，不会自动继续", async () => {
+    const controller = new AbortController();
+    const result = prepareListeningBook(source, ref, controller.signal);
+    const checked = expect(result).rejects.toMatchObject({ name: "AbortError" });
+    await wait(() => state.activeDownload !== ""); controller.abort(); await checked;
+    await wait(() => state.activeDownload === "");
+    expect(state.books[0]?.state).toBe("paused");
+  });
+  it("有其他下载时优先准备用户刚选中的书，再恢复原下载", async () => {
+    const first = await addDownload(source, ref); await wait(() => state.activeDownload === first.localId);
+    const picked = await prepareListeningBook(source, { ...ref, id: "recommended", title: "推荐书" }, new AbortController().signal);
+    expect(picked.downloaded).toContain("0");
+    await wait(() => first.state === "ready" && picked.state === "ready");
+  });
   it("删除本地内容保留历史，重新下载优先恢复原章节", async () => {
     const book = await addDownload(source, ref);
     await wait(() => book.state === "ready");

@@ -30,6 +30,8 @@ import ListeningSettings from "./components/ListeningSettings.vue";
 import AppUpdate from "./components/AppUpdate.vue";
 import AccessibilitySettings from "./components/AccessibilitySettings.vue";
 import AccessibleMode from "./components/AccessibleMode.vue";
+import RecommendedBooks from "./components/RecommendedBooks.vue";
+import type { Recommendation } from "./services/recommendations";
 import { accessibility, initializeAccessibility, cancelAnnouncements, cancelRecognition } from "./services/accessibility";
 import { updates, initializeUpdates, checkUpdates, refreshUpdates } from "./services/updates";
 import { tts, listeningMessage, initializeTts, refreshTts, ttsAction, controlListening } from "./services/tts";
@@ -57,6 +59,8 @@ import {
 import { SourceRuntime } from "./services/runtime";
 import { decodePackage } from "./services/packages";
 import { downloadPackage } from "./services/import";
+import { searchSource, searchSourceId } from "./services/search";
+import { readReaderSession, clearReaderSession } from "./services/reader-session";
 
 type View = "shelf" | "search" | "downloads" | "sources" | "listen" | "settings";
 const view = ref<View>("shelf");
@@ -67,7 +71,7 @@ const readerBook = ref<Book>();
 const reader = ref<InstanceType<typeof Reader>>();
 const accessibleMode = ref<InstanceType<typeof AccessibleMode>>();
 const keyword = ref("");
-const sourceId = ref("");
+const sourceId = searchSourceId;
 const results = ref<SourceBook[]>([]);
 const searchBusy = ref(false);
 const searched = ref(false);
@@ -133,7 +137,6 @@ const statusName: Record<Book["state"], string> = {
   error: "下载未完成",
   ready: "已完整下载",
 };
-let searchRuntime: SourceRuntime | undefined;
 let searchController: AbortController | undefined;
 let detailController: AbortController | undefined;
 let importController: AbortController | undefined;
@@ -192,8 +195,6 @@ function navigate(next: View) {
 function cancelSearch() {
   ++searchGeneration;
   searchController?.abort();
-  searchRuntime?.dispose();
-  searchRuntime = undefined;
   searchBusy.value = false;
 }
 function resetSearch() {
@@ -215,8 +216,6 @@ async function searchBooks(more = false) {
   const source = selectedSource.value;
   const controller = new AbortController();
   searchController = controller;
-  const runtime = new SourceRuntime(source);
-  searchRuntime = runtime;
   searchBusy.value = true;
   searched.value = true;
   searchError.value = "";
@@ -225,11 +224,7 @@ async function searchBooks(more = false) {
     cursor.value = undefined;
   }
   try {
-    const page = await runtime.call<Page<SourceBook>>(
-      "search",
-      [keyword.value.trim(), more ? cursor.value : undefined],
-      controller.signal,
-    );
+    const page = await searchSource(source, keyword.value, more ? cursor.value : undefined, controller.signal);
     if (generation !== searchGeneration) return;
     const next = more ? [...results.value] : [];
     const seen = new Set(next.map((book) => book.id));
@@ -238,23 +233,19 @@ async function searchBooks(more = false) {
         next.push(book);
         seen.add(book.id);
       }
-    if (more && page.nextCursor === cursor.value)
-      throw new Error("书源分页未前进，请重新搜索");
     results.value = next;
     cursor.value = page.nextCursor;
   } catch (error) {
     if (!controller.signal.aborted)
       searchError.value = (error as Error).message;
   } finally {
-    runtime.dispose();
     if (generation === searchGeneration) {
-      searchRuntime = undefined;
       searchBusy.value = false;
     }
   }
 }
-async function openDetail(book: SourceBook) {
-  const source = selectedSource.value;
+async function openDetail(book: SourceBook, recommendedSource?: InstalledSource) {
+  const source = recommendedSource ?? selectedSource.value;
   if (!source) return;
   closeDetail();
   const generation = detailGeneration;
@@ -276,6 +267,10 @@ async function openDetail(book: SourceBook) {
   } finally {
     if (generation === detailGeneration) detailBusy.value = false;
   }
+}
+function openRecommended(entry: Recommendation) {
+  const source = enabledSources.value.find((source) => source.manifest.id === entry.sourceId);
+  if (source) void openDetail(entry.book, source);
 }
 function closeDetail() {
   ++detailGeneration;
@@ -310,6 +305,7 @@ async function closeReader() {
     await reader.value?.persist();
   });
   readerBook.value = undefined;
+  clearReaderSession();
 }
 function progress(book: Book) {
   return book.chapters.length
@@ -424,6 +420,13 @@ function keyboard(event: KeyboardEvent) {
 onMounted(async () => {
   window.addEventListener("keydown", keyboard);
   await boot();
+  if (state.initialized) {
+    const session = readReaderSession();
+    const book = state.books.find((book) => book.localId === session?.bookId
+      && book.downloaded.includes(session.chapterId));
+    if (book) readerBook.value = book;
+    else clearReaderSession();
+  }
   await initializeTts().catch((error: Error) => notify(error.message));
   if (state.initialized) await initializeAccessibility().catch((error: Error) => notify(error.message));
   void initializeUpdates().then(() => checkUpdates()).catch((error: Error) => { updates.error = error.message; });
@@ -432,6 +435,7 @@ onMounted(async () => {
     listeners.push(
       await NativeApp.addListener("appStateChange", ({ isActive }) => {
         accessibility.active = isActive;
+        if (isActive) void reader.value?.resume();
         if (!isActive) { void cancelAnnouncements(); void cancelRecognition(); }
         if (isActive) void refreshTts().catch((error: Error) => notify(error.message));
         if (isActive) void initializeUpdates().then(async () => { await refreshUpdates(); await checkUpdates(); }).catch((error: Error) => { updates.error = error.message; });
@@ -440,7 +444,7 @@ onMounted(async () => {
           closeDetail();
           importController?.abort();
           void perform(async () => {
-            await reader.value?.persist();
+            await reader.value?.suspend();
             await pauseAll();
           });
         }
@@ -519,6 +523,7 @@ onBeforeUnmount(() => {
           </div>
           <span class="continue-ornament" aria-hidden="true">阅</span>
         </section>
+        <RecommendedBooks @choose="openRecommended" />
         <div v-if="state.books.length" class="collection-heading">
           <div class="segmented">
             <button

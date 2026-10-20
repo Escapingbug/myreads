@@ -22,7 +22,9 @@ async function fetchText(url: URL, headers: Record<string,string>, method: strin
   const selected = addresses.find(a => a.family === 4) ?? addresses[0]!;
   return new Promise<Buffer>((resolve, reject) => {
     const request = https.request(url, {
-      method, headers: { ...headers, 'accept-encoding': 'identity' },
+      // Node sends no User-Agent by default; some book sources redirect such
+      // requests away from the declared domain. Identify this client explicitly.
+      method, headers: { 'user-agent': 'MyReads/1.0', ...headers, 'accept-encoding': 'identity' },
       // Pin the address we validated rather than doing a second DNS resolution.
       lookup: (_host, options, callback) => options.all
         ? callback(null, [{ address: selected.address, family: selected.family }])

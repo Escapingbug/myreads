@@ -11,6 +11,23 @@ function bookCards(doc) {
   }).filter(Boolean);
 }
 const source = {
+  async recommend() {
+    const doc = sdk.parseHTML(await get(BASE + '/'));
+    const detailed = new Map(bookCards(doc).map(book => [book.id, book]));
+    const heading = [...doc.querySelectorAll('h2')].find(node => text(node) === '推荐小说');
+    const links = heading?.parentElement?.querySelectorAll('p.links a') || [];
+    const seen = new Set();
+    const items = [...links].map(link => {
+      const url = absolute(link.getAttribute('href'));
+      const author = [...doc.querySelectorAll('ul.list li')].find(node => absolute(node.querySelector('a')?.getAttribute('href') || '/') === url)?.querySelector('.author');
+      return detailed.get(url) || { id: url, url, title: text(link), author: text(author) };
+    }).filter(book => {
+      if (!book.title || seen.has(book.id) || !book.url.startsWith(BASE + '/n/')) return false;
+      seen.add(book.id); return true;
+    });
+    if (!items.length) throw Error('书源推荐页面已变化，请稍后重试');
+    return { items };
+  },
   async search(keyword, cursor) {
     const url = cursor || `${BASE}/index.php?c=book&a=search&keywords=${encodeURIComponent(keyword)}`;
     const doc = sdk.parseHTML(await get(url));

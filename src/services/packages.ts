@@ -16,6 +16,8 @@ export function validatePackage(value: unknown): SourcePackage {
     throw new Error("书源名称和版本不能为空");
   if (manifest.apiVersion !== 1)
     throw new Error("此书源的接口版本不受支持，目前支持 API 1");
+  if (manifest.capabilities !== undefined && (!Array.isArray(manifest.capabilities)
+    || manifest.capabilities.some((item) => item !== "recommend"))) throw new Error("书源扩展能力无效");
   if (
     !Array.isArray(manifest.domains) ||
     manifest.domains.length > 16 ||
