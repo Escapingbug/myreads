@@ -391,3 +391,11 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 ## 0.3.13 发布准备（2026-10-26）
 
 用户明确要求发布官方听书流程迁移。版本递增为0.3.13/code18，沿用既有 GitHub Actions 签名和 GitHub/Gitee 双渠道发布，禁止模拟器/ADB。版本说明为 `docs/releases/0.3.13.md`。先确认主分支验证，再打正式标签；公开 APK 将核对签名、版本、哈希、FST/JNI及更新渠道解析。上一节的未发布状态和调试包数据仅描述迁移完成时的状态，实际发布结果以后续记录为准。
+
+## 0.3.13 发布完成（2026-10-26）
+
+- GitHub 正式 latest：<https://github.com/Escapingbug/myreads/releases/tag/v0.3.13>；Gitee 正式最新版：<https://gitee.com/anciety/myreads/releases/tag/v0.3.13>（id1242522，prerelease=false）。版本0.3.13/code18，源码标签提交 `e20c31c7a6aa7e6d46bac5f983226d6241f22183`，包含上一节完整官方听书流程迁移。
+- 主分支完整验证 <https://github.com/Escapingbug/myreads/actions/runs/40291164739> 成功；正式标签流水线 <https://github.com/Escapingbug/myreads/actions/runs/40291824725> 的验证、签名构建和 GitHub 发布均成功。Gitee API 大文件上传停滞，主动取消该流水线的同步步骤，使用既有 Gitee 网页会话上传同一签名 APK 和 update.json，保留预发布；后续同步 <https://github.com/Escapingbug/myreads/actions/runs/40293733172> 复用三个附件、逐项匿名验证并转正式成功。没有重新构建或替换公开APK，不能把此结果表述为云端API大文件上传通过。
+- 两渠道匿名下载的完整 APK、update.json 和 SHA256SUMS 逐字节一致：APK 62,789,590 bytes，SHA-256 `2fc3a1a938dd2523651d8d45b1ea974ee4a252776f6ba7e70ffd9461dacb6d76`，与 GitHub 资产摘要一致。原签名证书SHA-256 `a0abb5c432d5ada068efe059a63c1ec4adef40754a915559e0520538124c1112` 与0.3.12一致，非调试、包名io.myreads.app、arm64-v8a/x86_64、minSdk24；16KB ZIP/ELF对齐通过。静态核对新JNI、四个FST哈希、新采样/持久化计划类及缓存revision进入包，旧混合历史类和测试资源未打包，前端0.3.13与移除的衔接开关相符。模型目录清单、VAD、更新渠道配置与旧版逐字节一致，无需重新下载模型。
+- 云端126项前端测试、主机JNI/FST文本夹具、Android主机测试与APK构建通过。真实大模型26块对照沿用此前本机72项无跳过测试证据，云端因未提供外部大模型而跳过该可选测试，不能宣称云端执行了真实模型对照。实际应用的parseUpdate/selectUpdate逻辑处理发布元数据和匿名更新清单，识别0.3.13/code18，选择Gitee且以同一哈希的GitHub地址备用。本机共享出口IP的GitHub匿名API配额已耗尽（403），GitHub发行元数据通过gh授权读取，三份公开下载文件仍全部匿名验证；Gitee发行信息也匿名验证。
+- 发布与验证记录在 `artifacts/release-0.3.13/verification.json`、`live-update-logic.json` 和对应云端日志；正式文件在 `release/`（均不提交）。未使用模拟器、ADB 或安装应用。用户可在设置→应用更新检查0.3.13，或手动覆盖安装；书架、阅读进度和模型保留。实体设备长时间后台播放、性能与听感仍保留真机验证边界。
