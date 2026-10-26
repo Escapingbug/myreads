@@ -45,6 +45,17 @@ android {
     externalNativeBuild {
         cmake { path 'src/main/cpp/CMakeLists.txt'; version '3.22.1' }
     }
+    testOptions {
+        unitTests.all {
+            if (project.hasProperty('ttsNativePath')) {
+                systemProperty 'java.library.path', project.property('ttsNativePath')
+                systemProperty 'tts.native', 'true'
+            }
+            ['ttsModelRoot', 'ttsReferenceRoot', 'ttsParityOutput'].each { key ->
+                if (project.hasProperty(key)) systemProperty key, project.property(key)
+            }
+        }
+    }
 }
 kotlin { jvmToolchain(21) }
 
@@ -61,6 +72,8 @@ dependencies {
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
     testImplementation "junit:junit:$junitVersion"
+    testImplementation 'org.json:json:20240303'
+    testRuntimeOnly 'com.microsoft.onnxruntime:onnxruntime:1.23.2'
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')

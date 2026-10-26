@@ -51,80 +51,58 @@ class MossOnnxDemoEngine(
     private val localFixedFrameSession = createSession(File(ttsDir, ttsMeta.files.localFixedSampledFrame))
     private val codecStepSession = createSession(File(codecDir, "moss_audio_tokenizer_decode_step.onnx"))
     private val codec = CodecStreamDecoder(env, codecStepSession, readJson(codecMetaPath))
-    private val vadSession = createSession(File(modelRoot, "Silero-VAD/silero_vad_16k_op15.onnx"))
-    private val speechEdges = SpeechEdges(env, vadSession)
 
     fun synthesize(
         textTokenIds: IntArray,
         outputFile: File = File(outputDir, "moss_tts_nano_android.wav"),
         voice: String = "Junhao",
-        maxFrames: Int = 160,
-        seed: Long = 1234L,
+        maxFrames: Int = 375,
+        random: OfficialRandom = OfficialRandom(),
         checkpoint: SynthesisCheckpoint = SynthesisCheckpoint {},
-        previousBoundary: NarrationPlanner.Boundary? = null,
-        previousRawTail: Int = 0,
-        previousRetainedTail: Int = 0,
-        continuationTextTokenIds: IntArray? = null,
-        prefixAudioCodes: List<IntArray> = emptyList(),
+        pauseSamples: Int = 0,
     ): SynthesisResult {
         require(textTokenIds.isNotEmpty()) { "textTokenIds must not be empty" }
         val startedAt = System.nanoTime()
+        val firstDraw = random.draws()
         var waitedNanos = 0L
         val activeCheckpoint = SynthesisCheckpoint {
             if (cancelled) throw InterruptedException("听书已停止")
             val before = System.nanoTime(); checkpoint.awaitReady(); waitedNanos += System.nanoTime() - before
         }
         activeCheckpoint.awaitReady()
-        val inputRows = if (continuationTextTokenIds == null) buildInputRows(textTokenIds, voice)
-            else buildContinuationRows(continuationTextTokenIds, prefixAudioCodes, voice)
+        val inputRows = buildInputRows(textTokenIds, voice)
         val prefillResult = runPrefill(inputRows)
         val prefillMs = (System.nanoTime() - startedAt - waitedNanos) / 1000000
         var stageStart = System.nanoTime(); var stageWait = waitedNanos
-        val audioTokens = runDecode(prefillResult, maxFrames, seed, activeCheckpoint)
+        val audioTokens = runDecode(prefillResult, maxFrames, random, activeCheckpoint)
         val generationMs = (System.nanoTime() - stageStart - (waitedNanos - stageWait)) / 1000000
         if (audioTokens.size >= maxFrames || audioTokens.isEmpty())
             return SynthesisResult(outputFile, audioTokens.size, 48000, 0, (System.nanoTime() - startedAt - waitedNanos) / 1000000, audioTokens)
         activeCheckpoint.awaitReady()
-        // The codec state must represent exactly the model's prefix. Retain that
-        // state across matching requests; emit only newly generated samples.
+        // The codec is causal. Reset between independent official voice-clone
+        // requests and keep state only across decoder batches within this chunk.
         stageStart = System.nanoTime(); stageWait = waitedNanos
-        val raw = codec.decode(audioTokens, activeCheckpoint, prefixAudioCodes)
+        val raw = codec.decode(audioTokens, activeCheckpoint)
         val codecMs = (System.nanoTime() - stageStart - (waitedNanos - stageWait)) / 1000000
         activeCheckpoint.awaitReady()
-        stageStart = System.nanoTime(); stageWait = waitedNanos
-        val bounds = speechEdges.detect(raw, activeCheckpoint)
-        val vadMs = (System.nanoTime() - stageStart - (waitedNanos - stageWait)) / 1000000
-        val rendered = NarrationTiming.render(raw, bounds[0], bounds[1], previousBoundary, previousRawTail, previousRetainedTail)
-        activeCheckpoint.awaitReady()
+        require(pauseSamples >= 0 && pauseSamples <= 48000)
+        // Match upstream joining: retain all generated PCM and append only its
+        // 240/400 ms inter-chunk pause. Never trim or retime model speech.
+        val samples = if (pauseSamples == 0) raw else raw.copyOf(raw.size + pauseSamples)
         val sampleRate = codecMeta.codecConfig.sampleRate
-        writeWavMono(rendered.samples, sampleRate, outputFile)
+        writeWavMono(samples, sampleRate, outputFile)
         val elapsedMs = (System.nanoTime() - startedAt - waitedNanos) / 1000000
         return SynthesisResult(
             outputFile = outputFile,
             generatedFrames = audioTokens.size,
             sampleRate = sampleRate,
-            durationMs = (rendered.samples.size.toDouble() / sampleRate * 1000.0).toLong(),
+            durationMs = (samples.size.toDouble() / sampleRate * 1000.0).toLong(),
             elapsedMs = elapsedMs,
             audioCodes = audioTokens,
-            rawLeading = rendered.leading, rawTrailing = rendered.trailing, retainedTail = rendered.retainedTail,
-            prefillMs = prefillMs, generationMs = generationMs, codecMs = codecMs, vadMs = vadMs,
+            prefillMs = prefillMs, generationMs = generationMs, codecMs = codecMs,
             codecWarmFrames = codec.warmedFrames,
+            randomDraws = random.draws() - firstDraw,
         )
-    }
-
-    fun continuationTextTokens(encoder: NarrationPrompt.Encoder, previous: String, target: String): IntArray {
-        return NarrationPrompt.transcript(encoder, previous, target)
-    }
-
-    private fun buildContinuationRows(tokens: IntArray, codes: List<IntArray>, voice: String): InputRows {
-        require(codes.isNotEmpty() && codes.size <= NarrationContext.MAX_FRAMES)
-        val cfg = manifest.ttsConfig
-        // Keep the fixed user-side voice reference on every request. History
-        // remains assistant-side audio paired with the full previous/target text.
-        // The rolling window supplies context; it does not replace the voice anchor.
-        val rows = buildInputRows(tokens, voice).inputIds.toList() +
-            buildAudioRows(codes, cfg, cfg.nVq + 1, cfg.audioAssistantSlotTokenId)
-        return InputRows(rows.toTypedArray(), IntArray(rows.size) { 1 })
     }
 
     override fun close() {
@@ -233,7 +211,7 @@ class MossOnnxDemoEngine(
         }
     }
 
-    private fun runDecode(prefillResult: PrefillResult, maxFrames: Int, seed: Long, checkpoint: SynthesisCheckpoint): List<IntArray> {
+    private fun runDecode(prefillResult: PrefillResult, maxFrames: Int, random: OfficialRandom, checkpoint: SynthesisCheckpoint): List<IntArray> {
         val cfg = manifest.ttsConfig
         val audioTokens = ArrayList<IntArray>()
         val rowWidth = cfg.nVq + 1
@@ -241,7 +219,6 @@ class MossOnnxDemoEngine(
         val previousTokenSets = Array(cfg.nVq) { HashSet<Int>() }
         val decodePastInputNames = ttsMeta.onnx.decodeInputNames.drop(2)
         val decodePresentOutputNames = ttsMeta.onnx.decodeOutputNames.drop(1)
-        val random = java.util.Random(seed)
         var pastValidLengths = prefillResult.pastValidLengths
         var globalHidden = prefillResult.globalHidden
         var pastResult: OrtSession.Result? = prefillResult.pastResult
@@ -302,7 +279,7 @@ class MossOnnxDemoEngine(
     private fun runLocalFixedSampledFrame(
         globalHidden: OnnxTensor,
         previousTokenSets: Array<HashSet<Int>>,
-        random: java.util.Random,
+        random: OfficialRandom,
     ): LocalFrameResult {
         val cfg = manifest.ttsConfig
         val audioCodebookSize = cfg.audioCodebookSizes.firstOrNull() ?: 1024
@@ -315,14 +292,8 @@ class MossOnnxDemoEngine(
                 }
             }
         }
-        // The exported graph continues iff u <= P(continue). u=0.5 chooses
-        // the more likely stop/continue token while audio sampling stays varied.
-        // Sampling EOS with u close to 1 cut complete sentences off at frame 58.
-        random.nextDouble() // Preserve the established sequence of audio-code draws.
-        val assistantRandom = floatArrayOf(0.5f)
-        val audioRandom = FloatArray(cfg.nVq) {
-            random.nextDouble().coerceIn(1e-6, 1.0 - 1e-6).toFloat()
-        }
+        val assistantRandom = floatArrayOf(random.nextFloat())
+        val audioRandom = FloatArray(cfg.nVq) { random.nextFloat() }
         OnnxTensor.createTensor(
             env,
             IntBuffer.wrap(seenMask),
@@ -373,7 +344,7 @@ class MossOnnxDemoEngine(
         buffer.put("data".toByteArray(Charsets.US_ASCII))
         buffer.putInt(dataSize)
         for (sample in audioData) {
-            buffer.putShort((sample.coerceIn(-1f, 1f) * 32767f).toInt().toShort())
+            buffer.putShort(Math.rint((sample.coerceIn(-1f, 1f) * 32767f).toDouble()).toInt().toShort())
         }
         outputFile.writeBytes(buffer.array())
     }
@@ -478,6 +449,7 @@ data class SynthesisResult(
     val vadMs: Long = 0,
     val codecWarmFrames: Int = 0,
     val retryMs: Long = 0,
+    val randomDraws: Long = 0,
 ) {
     fun includeRetries(ms: Long): SynthesisResult = copy(elapsedMs = elapsedMs + ms, retryMs = ms)
 }

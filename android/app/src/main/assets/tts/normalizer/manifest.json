@@ -1,0 +1,31 @@
+{
+  "version": "wetext-1.2.0-moss-8b7bcc9-v1",
+  "source": "wenet-e2e/WeTextProcessing 1.2.0",
+  "config": {
+    "remove_interjections": false,
+    "remove_erhua": false,
+    "full_to_half": false
+  },
+  "files": [
+    {
+      "name": "zh_tn_tagger.fst",
+      "size": 2196486,
+      "sha256": "d7ca894e8e813629868b3b7f34419ba8956a8c8240ea997635664f87ef8c21b8"
+    },
+    {
+      "name": "zh_tn_verbalizer.fst",
+      "size": 87702,
+      "sha256": "8a0ead4c61217bad171a37e9bd659ef912dd3a749267a4b672008f25b510bdb4"
+    },
+    {
+      "name": "en_tn_tagger.fst",
+      "size": 5389758,
+      "sha256": "61cbddde25889cb9f300c522351c3d2d14f6ba4f4c544bfc9da76c961be6d258"
+    },
+    {
+      "name": "en_tn_verbalizer.fst",
+      "size": 2171742,
+      "sha256": "5ba895b6a90a6ab0f60ccf9e52bbb770f496c62856e00ade3ef4a18760bd774e"
+    }
+  ]
+}

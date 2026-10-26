@@ -372,3 +372,22 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - 126 项前端测试、76 项 Android 主机测试、生产构建、Capacitor 同步与调试 APK 构建通过；主分支完整验证 <https://github.com/Escapingbug/myreads/actions/runs/39392378971> 成功。标签流水线 <https://github.com/Escapingbug/myreads/actions/runs/39392378672> 的验证、签名构建及 GitHub 发布成功，仅 Gitee 连接超时失败。macOS 重试能创建预发布，但附件连接仍超时；使用用户现有 Gitee 网页会话上传 GitHub 的同一 APK / update.json / SHA256SUMS 后，最终同步 <https://github.com/Escapingbug/myreads/actions/runs/39393707977> 逐项匿名验证并转正式成功。没有重新构建或替换已发布 APK。
 - 两渠道匿名下载的完整 APK 为 59,941,870 bytes，SHA-256 `af548701187ddebec31f39e6ab94a138cd70f2c508a6af61c64388c5c8b4a09a`；公开清单、校验文件和 GitHub 资产摘要一致。签名验证通过，与 0.3.11 证书一致：`a0abb5c432d5ada068efe059a63c1ec4adef40754a915559e0520538124c1112`。包名 io.myreads.app、versionCode17、非调试、arm64-v8a / x86_64；静态确认推荐/简单听书、搜索表单、阅读会话与原生渲染恢复进入正式包，两个内置书源为 1.1.0，模型目录与 VAD 文件和旧版逐字节一致，没有随包分发大型模型。
 - 使用实际应用更新模块读取匿名线上两渠道元数据与清单，识别 0.3.12 / code17，自动选择 Gitee，GitHub 作为相同大小/哈希 APK 的备用 URL。实际文件及验证记录保存在 `release/`、`artifacts/release-0.3.12/verification.json`、`live-update-logic.json` 与 `gitee-published.png`（均不提交）。全程未使用模拟器、ADB 或安装应用；实体设备音频、后台连续播放和偶发锁屏恢复仍待真机验证。
+
+## 官方 ONNX 听书流程迁移（2026-10-26，未发布）
+
+用户反馈句内拖音、字间断续及语速忽快忽慢，要求先对比完整官方流程和现有流程，并通过实际试听判断。此前未发布的时长/节奏参考保护已撤销；它不能解释或可靠识别句内节奏问题。用户试听完整官方长篇后确认流畅、语速合理，而 current 在“别着急，先坐下来喝口水。老人……”附近有重复和断字；同输入的短对照 B 去除混合历史后，用户确认没有这些问题。用户随后明确授权“进行迁移”。
+
+- 基准固定为 OpenMOSS/MOSS-TTS-Nano `8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb` 的 `onnx_tts_runtime.py` 完整 `synthesize`，不是官方滚动续接。听书正文和标题采用 robust_pre → WeTextProcessing 1.2.0 → robust_post、官方75 token贪心分块；正文跨印刷段落打包，保留引号等官方输入。标题单独作为请求，不消耗正文采样状态。
+- 打包官方配置的中英文 WeText FST（9,845,688 bytes），JNI 运行 OpenFst tag/reorder/verbalize；规则有 SHA-256 清单及许可证，无需另下模型。OpenFst 核心源码随仓库固定，构建不下载依赖；保留 Android 16 KB 页支持。原模型文件和下载目录不变。
+- 每块只使用固定音色的 user-side reference，不再带前一块 assistant-side 音频/文字历史；删除混合历史与 codec 跨请求预热。整章共享与 NumPy default_rng(1234) 一致的 PCG64，assistant EOS 和16路音频均按官方采样，块间不重置随机流。暂停让出模型、失败或触及375帧上限时回滚未播放采样状态；触顶只切小未生成块，不更换种子。提示播报是独立请求，使用原有短提示文本拆分，不能消耗正文状态。
+- codec 在每个独立块开始重置，仅保留块内16帧批次的因果状态。保留全部生成 PCM，不运行 VAD 裁剪或原自定义边界处理；只在块间追加官方240/400ms静音。播放器仅保留用户手动倍速。
+- 正文缓存升级为 `narration-official-onnx-v6`，键包含采样起始状态与块间静音，命中后推进准确抽样次数。提示缓存升级为 `utterance-official-v5` 并实际接入版本键。新持久化朗读计划保存分块边界、章节源哈希和模型/音色身份，播放进度保存块索引和该块起始 RNG；进程重启即使 WAV 缓存消失也可重建同一块，恢复缓冲期间保留 checkpoint。旧版进度或无效计划安全退回已有段落位置。重新开始会从当前块开头播放，不恢复块内毫秒位置。
+- 删除“跨句衔接”设置和旧配置转发，普通/无障碍听书统一走新正文流程。保留欠载诊断日志，区分设备输出缓冲不足与 WAV 内容问题。
+- 126项前端测试、72项Android主机测试全部通过（包含实际 JNI/FST 与真实模型长篇对照，无跳过）。55组官方/边界文本的166项离线文本/分块核对无差异；PCG64连续10,000次抽样逐位一致。悦文和俊豪各13块，共26块，迁移后的实际 Kotlin 引擎与官方音频编码逐帧一致；16位PCM最大仅差1个量化单位，块间静音及长度正确。长篇中途从保存的位置和计划恢复后仍逐帧一致；缓存状态推进和实际模型生成中断回滚均通过。这些是生成一致性证据，听感依据仍是用户此前对官方样本的实际试听。
+- 主机复现和试听：`artifacts/official-migration/audio/Yuewen-migrated.wav`、`Junhao-migrated.wav`、`parity.json`，测试与构建日志也在该目录上级。研究原始输入、控制变量、官方源码及用户试听反馈在 `artifacts/official-longform-audit-20261026/`；均不提交大模型或音频。CI 新增主机 JNI 构建和完整文本规则夹具验证；真实大模型测试通过 Gradle 属性显式启用。
+- 生产前端构建/Capacitor同步与最终 `assembleDebug --rerun-tasks --no-watch-fs` 通过。调试APK为69,339,391 bytes，SHA-256 `d4ba287fb02cd19b8c1a89b947c91b083c7f453353a3312cffcd0a2b954cdabd`；签名、16 KB ZIP/ELF对齐、两种ABI的新JNI、四个FST哈希、14个前端资产逐字节核对通过，静态确认新流程/恢复字段进入包、旧混合历史类和主机测试资源未打包。验证记录 `artifacts/official-migration/verification.json`；仍为调试构建和原0.3.12/code17版本号，不是新正式版。
+- 本轮没有递增版本、提交、推送或发布；全程未使用模拟器、ADB 或安装应用。实体设备长时间后台播放、性能/内存、设备输出缓冲及端到端听感仍需真机验证，主机对照不能替代这些验证。
+
+## 0.3.13 发布准备（2026-10-26）
+
+用户明确要求发布官方听书流程迁移。版本递增为0.3.13/code18，沿用既有 GitHub Actions 签名和 GitHub/Gitee 双渠道发布，禁止模拟器/ADB。版本说明为 `docs/releases/0.3.13.md`。先确认主分支验证，再打正式标签；公开 APK 将核对签名、版本、哈希、FST/JNI及更新渠道解析。上一节的未发布状态和调试包数据仅描述迁移完成时的状态，实际发布结果以后续记录为准。

@@ -1,0 +1,10 @@
+{
+  "upstream": "https://github.com/OpenMOSS/MOSS-TTS-Nano/tree/8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb",
+  "license": "Apache-2.0; see main/assets/tts/MOSS-LICENSE.txt",
+  "official-robust.tsv": "55 UTF-8 inputs and pinned robust normalizer outputs, base64 columns",
+  "official-normalization.tsv": "The same inputs through robust_pre -> WeTextProcessing 1.2.0 -> robust_post; base64 input/output columns, language selected with the pinned Yuewen fallback",
+  "official-pcg64.txt": "10,000 IEEE-754 double bit patterns from NumPy 1.26.4 default_rng(1234).random(), one lowercase hex value per line",
+  "tokenizer.model": "Unmodified MOSS-TTS-Nano-100M-ONNX tokenizer used to test real 75-token boundaries; test-only, not packaged in APK",
+  "normalizerGraphs": "main/assets/tts/normalizer/manifest.json records exact WeText graph options and SHA-256 hashes",
+  "longformTest": "OfficialModelParityTest is opt-in via ttsModelRoot, ttsReferenceRoot and ttsParityOutput; it uses external weights and official reference codes/PCM, never an emulator"
+}

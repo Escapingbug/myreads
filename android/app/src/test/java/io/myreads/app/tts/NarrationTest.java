@@ -176,14 +176,14 @@ public class NarrationTest {
         NarrationCache.write(data, clip); Files.write(clip.file.toPath(), new byte[101]);
         assertNull(NarrationCache.read(clip.file, data, clip.unit));
     }
-    @Test public void cacheKeyIncludesVoiceAndTimingWithoutInheritingPreviousGeneratedSpeech() throws Exception {
-        NarrationCache.Clip previous = clip(); NarrationPlanner.Unit next = new NarrationPlanner.Unit("进来。", PARAGRAPH, false);
-        String key = NarrationCache.key("model", "voice", next, previous);
-        assertEquals(key, NarrationCache.key("model", "voice", next, previous));
-        assertNotEquals(key, NarrationCache.key("model", "voice", next, null));
-        assertNotEquals(key, NarrationCache.key("model", "other-voice", next, previous));
-        assertNotEquals(key, NarrationCache.key("model", "voice", next.ending(SENTENCE), previous));
-        previous.codes.get(0)[0]++;
-        assertEquals(key, NarrationCache.key("model", "voice", next, previous));
+    @Test public void cacheKeyIncludesOfficialRandomPositionAndJoining() throws Exception {
+        NarrationPlanner.Unit next = new NarrationPlanner.Unit("进来。", PARAGRAPH, false);
+        OfficialRandom random = new OfficialRandom();
+        String key = NarrationCache.key("model", "voice", next, random, 19200);
+        assertEquals(key, NarrationCache.key("model", "voice", next, random.copy(), 19200));
+        assertNotEquals(key, NarrationCache.key("model", "other-voice", next, random, 19200));
+        assertNotEquals(key, NarrationCache.key("model", "voice", next, random, 0));
+        random.advance(17);
+        assertNotEquals(key, NarrationCache.key("model", "voice", next, random, 19200));
     }
 }

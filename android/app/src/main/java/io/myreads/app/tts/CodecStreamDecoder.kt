@@ -6,14 +6,13 @@ import java.nio.FloatBuffer
 import java.nio.IntBuffer
 import org.json.JSONObject
 
-/** Reuse state only when it represents the exact beginning of the next prefix. */
+/** Causal decoding within one independent official voice-clone request. */
 internal class CodecStreamDecoder(private val env: OrtEnvironment, private val session: OrtSession, metadata: JSONObject) : Closeable {
     private val batchFrames = 16
     private data class State(val input: String, val output: String, val shape: LongArray, val integer: Boolean, val initial: Int = 0)
     private val states = mutableListOf<State>()
     private val zeros = linkedMapOf<String, OnnxTensor>()
     private var previous: OrtSession.Result? = null
-    private val history = CodecHistory()
     var warmedFrames: Int = 0
         private set
     init {
@@ -41,16 +40,10 @@ internal class CodecStreamDecoder(private val env: OrtEnvironment, private val s
         if (state.integer) OnnxTensor.createTensor(env, IntBuffer.wrap(IntArray(count) { state.initial }), state.shape)
         else OnnxTensor.createTensor(env, FloatBuffer.wrap(FloatArray(count)), state.shape)
     }
-    fun decode(codes: List<IntArray>, checkpoint: SynthesisCheckpoint, prefix: List<IntArray> = emptyList()): FloatArray {
-        val reusable = history.reusableFrames(prefix)
-        if (reusable < 0) reset()
+    fun decode(codes: List<IntArray>, checkpoint: SynthesisCheckpoint): FloatArray {
+        reset()
         warmedFrames = 0
         try {
-            // Bound transient waveform allocations during prefix warm-up. State
-            // stays continuous across these batches and the new target codes.
-            for (chunk in prefix.drop(reusable.coerceAtLeast(0)).chunked(batchFrames)) {
-                checkpoint.awaitReady(); run(chunk); warmedFrames += chunk.size
-            }
             val mono = FloatArray(codes.size * 3840)
             var offset = 0
             // Keep the codec's causal state while bounding attention/waveform
@@ -61,11 +54,8 @@ internal class CodecStreamDecoder(private val env: OrtEnvironment, private val s
                 offset += copyMono(next, chunk.size * 3840, mono, offset)
             }
             require(offset == mono.size) { "语音解码长度不一致" }
-            history.accept(prefix, codes)
             return mono
-        } catch (failure: Throwable) {
-            reset(); throw failure
-        }
+        } finally { reset() }
     }
     private fun copyMono(next: OrtSession.Result, expected: Int, mono: FloatArray, offset: Int): Int {
         val audio = next.get("audio").get() as OnnxTensor
@@ -99,6 +89,6 @@ internal class CodecStreamDecoder(private val env: OrtEnvironment, private val s
             }
         }
     }
-    private fun reset() { previous?.close(); previous = null; history.clear() }
+    private fun reset() { previous?.close(); previous = null }
     override fun close() { reset(); zeros.values.forEach { it.close() }; zeros.clear() }
 }

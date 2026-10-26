@@ -133,7 +133,7 @@ public final class ZijianAccessibilityPlugin extends Plugin {
         if (!enabled || token != generation.get()) throw new InterruptedException();
     }
     private String key(String text) throws Exception {
-        byte[] digest = MessageDigest.getInstance("SHA-256").digest(("moss-ui-v1:" + text).getBytes(StandardCharsets.UTF_8));
+        byte[] digest = MessageDigest.getInstance("SHA-256").digest(("moss-ui-v1:" + SpeechText.AUDIO_REVISION + ":" + text).getBytes(StandardCharsets.UTF_8));
         StringBuilder result = new StringBuilder(); for (byte b : digest) result.append(String.format("%02x", b)); return result.toString();
     }
     private void trim(File directory, List<File> protectedFiles) {

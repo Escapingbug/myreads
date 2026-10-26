@@ -8,6 +8,7 @@ import androidx.annotation.Nullable;
 import androidx.core.app.NotificationCompat;
 import androidx.media3.common.*;
 import androidx.media3.exoplayer.ExoPlayer;
+import androidx.media3.exoplayer.analytics.AnalyticsListener;
 import androidx.media3.session.*;
 import com.getcapacitor.JSObject;
 import org.json.*;
@@ -35,16 +36,20 @@ public final class BookPlaybackService extends MediaSessionService {
     private int preparedUnits, totalUnits;
     private volatile boolean producing;
     private volatile boolean wantsPlayback = true;
-    private boolean continuity = true;
     private volatile SynthesisGate synthesisGate = new SynthesisGate();
     private String bookId = "", bookTitle = "", chapterTitle = "", voice = "Junhao", error = "", phase = "idle", text = "";
     private int chapter, paragraph;
     private volatile float speed = 1;
+    private String playingPlan = "", playingRandom = "";
+    private int playingUnit = -1;
+    private long playingDraws;
     private long progressAt;
     private volatile JSObject snapshot = new JSObject().put("phase", "idle");
     private long nextProgress;
     private long nextPreparation;
     private long playbackIntent;
+    private int audioUnderruns;
+    private long nextUnderrunLog;
     private final Runnable heartbeat = new Runnable() {
         @Override public void run() {
             if (player != null && player.isPlaying()) { updateBuffer(); publish(false); main.postDelayed(this, 1000); }
@@ -66,6 +71,20 @@ public final class BookPlaybackService extends MediaSessionService {
         player.setAudioAttributes(new AudioAttributes.Builder().setUsage(C.USAGE_MEDIA).setContentType(C.AUDIO_CONTENT_TYPE_SPEECH).build(), true);
         player.setHandleAudioBecomingNoisy(true);
         player.setWakeMode(C.WAKE_MODE_LOCAL);
+        player.addAnalyticsListener(new AnalyticsListener() {
+            @Override public void onAudioUnderrun(EventTime eventTime, int bufferSize, long bufferSizeMs,
+                                                  long elapsedSinceLastFeedMs) {
+                audioUnderruns++;
+                long now = SystemClock.elapsedRealtime();
+                if (now < nextUnderrunLog) return;
+                nextUnderrunLog = now + 5000;
+                // Distinguish AudioTrack starvation from slow speech already in
+                // a complete local WAV; do not log the user's book or text.
+                android.util.Log.w("ZijianTts", "Audio output underrun, count=" + audioUnderruns
+                    + ", bufferMs=" + bufferSizeMs + ", sinceFeedMs=" + elapsedSinceLastFeedMs
+                    + ", speed=" + player.getPlaybackParameters().speed + ", queuedMs=" + bufferedMs);
+            }
+        });
         session = new MediaSession.Builder(this, new ForwardingPlayer(player) {
             @Override public void stop() { stopPlayback(); }
             @Override public void pause() { pausePlayback(); }
@@ -92,6 +111,8 @@ public final class BookPlaybackService extends MediaSessionService {
                     chapter = extras.getInt("chapter"); paragraph = extras.getInt("paragraph");
                     progressAt = System.currentTimeMillis();
                     chapterTitle = extras.getString("chapterTitle", ""); text = extras.getString("text", "");
+                    playingPlan = extras.getString("plan", ""); playingUnit = extras.getInt("unit", -1);
+                    playingRandom = extras.getString("rng", ""); playingDraws = extras.getLong("rngDraws", 0);
                     if (player.getCurrentMediaItemIndex() > 0) player.removeMediaItems(0, player.getCurrentMediaItemIndex());
                     updateBuffer(); publish();
                 }
@@ -136,11 +157,23 @@ public final class BookPlaybackService extends MediaSessionService {
         synthesisGate.cancel();
         SynthesisGate gate = new SynthesisGate(); synthesisGate = gate;
         producing = true; wantsPlayback = true; error = ""; phase = "loading";
+        audioUnderruns = 0; nextUnderrunLog = 0;
         bookId = intent.getStringExtra("bookId"); bookTitle = intent.getStringExtra("title");
         chapter = intent.getIntExtra("chapter", 0); paragraph = intent.getIntExtra("paragraph", 0);
         progressAt = System.currentTimeMillis();
         voice = intent.getStringExtra("voice"); speed = intent.getFloatExtra("speed", 1);
-        continuity = intent.getBooleanExtra("continuity", true);
+        NarrationPlan.Resume restored = null;
+        try {
+            restored = NarrationPlan.Resume.read(new JSONObject(getSharedPreferences("tts-playback", MODE_PRIVATE)
+                .getString("position", "{}")), bookId, chapter, paragraph, voice);
+        } catch (Exception ignored) {}
+        final NarrationPlan.Resume resume = restored;
+        // Keep a valid checkpoint while the first resumed WAV is being prepared.
+        // A second process death during buffering must not erase that checkpoint.
+        playingPlan = resume == null ? "" : resume.plan;
+        playingUnit = resume == null ? -1 : resume.unit;
+        playingRandom = resume == null ? "" : resume.random.key();
+        playingDraws = resume == null ? 0 : resume.random.draws();
         text = ""; chapterTitle = "";
         preparation = "buffer"; preparedUnits = totalUnits = 0; preparingChapterTitle = "";
         player.stop(); player.clearMediaItems(); player.setPlaybackSpeed(speed); player.setPlayWhenReady(true);
@@ -150,27 +183,34 @@ public final class BookPlaybackService extends MediaSessionService {
         final String activeBook = bookId, selectedVoice = voice;
         final int startChapter = chapter, startParagraph = paragraph;
         final String mode = intent.getStringExtra("mode");
-        final boolean continuous = continuity;
-        inference.execute(() -> produce(token, gate, activeBook, selectedVoice, startChapter, startParagraph, mode, continuous));
+        inference.execute(() -> produce(token, gate, activeBook, selectedVoice, startChapter, startParagraph, mode, resume));
     }
     private static final class Planned {
         final NarrationPlanner.Unit unit;
-        final int paragraph;
-        final boolean resetContext;
-        Planned(NarrationPlanner.Unit unit, int paragraph) {
-            this(unit, paragraph, false);
-        }
-        Planned(NarrationPlanner.Unit unit, int paragraph, boolean resetContext) {
-            this.unit = unit; this.paragraph = paragraph; this.resetContext = resetContext;
+        final int paragraph, pauseSamples;
+        final boolean title;
+        final NarrationPlan plan;
+        final int index;
+        Planned(OfficialNarration.Chunk chunk, boolean title) { this(chunk, title, null, -1); }
+        Planned(OfficialNarration.Chunk chunk, boolean title, NarrationPlan plan, int index) {
+            this.unit = new NarrationPlanner.Unit(chunk.text, title ? NarrationPlanner.Boundary.TITLE
+                : chunk.pauseSamples == 0 ? NarrationPlanner.Boundary.CHAPTER : NarrationPlanner.Boundary.SENTENCE, false);
+            this.paragraph = chunk.paragraph; this.pauseSamples = chunk.pauseSamples; this.title = title;
+            this.plan = plan; this.index = index;
         }
     }
     private static final class Ready {
         final NarrationCache.Clip clip;
-        final int paragraph;
-        Ready(NarrationCache.Clip clip, int paragraph) { this.clip = clip; this.paragraph = paragraph; }
+        final int paragraph, index;
+        final String plan, random;
+        final long draws;
+        Ready(NarrationCache.Clip clip, Planned planned, OfficialRandom start) {
+            this.clip = clip; paragraph = planned.paragraph; index = planned.index;
+            plan = planned.plan == null ? "" : planned.plan.id; random = start.key(); draws = start.draws();
+        }
     }
     private void produce(int token, SynthesisGate gate, String activeBook, String selectedVoice,
-                         int startChapter, int startParagraph, String mode, boolean continuous) {
+                         int startChapter, int startParagraph, String mode, NarrationPlan.Resume resume) {
         SpeechModelRuntime.retainNarration();
         try {
             check(token);
@@ -185,11 +225,8 @@ public final class BookPlaybackService extends MediaSessionService {
                 Double.longBitsToDouble(getSharedPreferences("tts-performance", MODE_PRIVATE).getLong("ratio", 0)));
             JSONObject metadata = new JSONObject(LocalTtsFiles.text(new File(getFilesDir(), "tts-books/" + activeBook + ".json")));
             JSONArray chapters = metadata.getJSONArray("chapters");
-            NarrationCache.Clip previous = null;
-            NarrationContext history = new NarrationContext();
             for (int ch = startChapter; ch < chapters.length(); ch++) {
                 check(token);
-                history.clear();
                 JSONObject reference = chapters.getJSONObject(ch);
                 awaitBuffer(token, gate, buffer.aheadMs(speed));
                 File contentFile = new File(getFilesDir(), "books/" + activeBook + "/" + ch + ".json");
@@ -200,24 +237,36 @@ public final class BookPlaybackService extends MediaSessionService {
                 JSONArray paragraphs = new JSONObject(LocalTtsFiles.text(contentFile)).getJSONArray("paragraphs");
                 int first = ch == startChapter ? Math.min(startParagraph, Math.max(0, paragraphs.length() - 1)) : 0;
                 String title = reference.getString("title");
-                ArrayDeque<Planned> units = new ArrayDeque<>();
-                if (first == 0) {
-                    for (NarrationPlanner.Unit unit : NarrationPlanner.paragraph(title + "。", counter))
-                        units.add(new Planned(unit.ending(NarrationPlanner.Boundary.TITLE), 0));
+                File planDirectory = new File(getFilesDir(), "tts-plans");
+                String sourceHash = ModelRepository.hash(contentFile);
+                NarrationPlan plan = null; int firstUnit = 0;
+                OfficialRandom bodyRandom = new OfficialRandom(), titleRandom = new OfficialRandom();
+                if (ch == startChapter && resume != null) {
+                    plan = NarrationPlan.load(planDirectory, resume.plan, models.id, selectedVoice, sourceHash);
+                    if (plan != null && resume.unit < plan.chunks.size() && plan.chunks.get(resume.unit).paragraph == first) {
+                        firstUnit = resume.unit; bodyRandom = resume.random.copy();
+                    } else plan = null;
                 }
-                boolean sceneStart = false;
-                for (int p = first; p < paragraphs.length(); p++) {
-                    gate.awaitReady(() -> {}, () -> {}); check(token);
-                    String original = paragraphs.getString(p);
-                    if (NarrationPlanner.sceneBreak(original)) { sceneStart = true; continue; }
-                    List<NarrationPlanner.Unit> prose = NarrationPlanner.paragraph(original, counter);
-                    for (int i = 0; i < prose.size(); i++) {
-                        NarrationPlanner.Unit unit = prose.get(i);
-                        if (p == paragraphs.length() - 1 && i == prose.size() - 1) unit = unit.ending(NarrationPlanner.Boundary.CHAPTER);
-                        units.add(new Planned(unit, p, sceneStart && i == 0));
+                boolean resumed = plan != null;
+                if (plan == null) {
+                    List<OfficialNarration.Paragraph> prose = new ArrayList<>();
+                    for (int p = first; p < paragraphs.length(); p++) {
+                        gate.awaitReady(() -> {}, () -> {}); check(token);
+                        String original = paragraphs.getString(p);
+                        if (!NarrationPlanner.sceneBreak(original)) prose.add(new OfficialNarration.Paragraph(original, p));
                     }
-                    if (!prose.isEmpty()) sceneStart = false;
+                    List<OfficialNarration.Chunk> chunks = prose.isEmpty() ? Collections.emptyList()
+                        : SpeechModelRuntime.planChapter(this, prose, selectedVoice);
+                    plan = NarrationPlan.create(planDirectory, models.id, selectedVoice, sourceHash, first, chunks);
                 }
+                ArrayDeque<Planned> units = new ArrayDeque<>();
+                if (!resumed && first == 0) {
+                    List<OfficialNarration.Paragraph> heading = Collections.singletonList(new OfficialNarration.Paragraph(title, 0));
+                    for (OfficialNarration.Chunk chunk : SpeechModelRuntime.planChapter(this, heading, selectedVoice))
+                        units.add(new Planned(new OfficialNarration.Chunk(chunk.text, 0,
+                            chunk.pauseSamples == 0 ? OfficialNarration.pauseSamples(chunk.text) : chunk.pauseSamples), true));
+                }
+                for (int i = firstUnit; i < plan.chunks.size(); i++) units.add(new Planned(plan.chunks.get(i), false, plan, i));
                 if (units.isEmpty()) throw new IOException("这一章没有可朗读的内容");
                 boolean wholeChapter = buffer.prepareChapter();
                 int done = 0, count = units.size();
@@ -228,10 +277,10 @@ public final class BookPlaybackService extends MediaSessionService {
                     if (!wholeChapter) awaitBuffer(token, gate, buffer.aheadMs(speed));
                     else { gate.awaitReady(() -> {}, () -> {}); check(token); }
                     Planned planned = units.removeFirst();
-                    if (planned.resetContext) history.clear();
-                    NarrationContext.Window context = continuous ? history.before(planned.unit) : null;
+                    OfficialRandom random = planned.title ? titleRandom : bodyRandom;
+                    OfficialRandom chunkStart = random.copy();
                     NarrationCache.Clip clip;
-                    try { clip = audio(token, gate, models, selectedVoice, planned.unit, previous, context); }
+                    try { clip = audio(token, gate, models, selectedVoice, planned, random); }
                     catch (SpeechModelRuntime.YieldNarration yielded) {
                         units.addFirst(planned);
                         gate.awaitReady(() -> {}, () -> {});
@@ -239,35 +288,32 @@ public final class BookPlaybackService extends MediaSessionService {
                         continue;
                     }
                     catch (FrameLimitException limit) {
-                        if (context != null) {
-                            // Retry unplayed text once from the fixed reference. A bad
-                            // continuation must never contaminate subsequent history.
-                            history.clear(); units.addFirst(new Planned(planned.unit, planned.paragraph, true));
-                            android.util.Log.i("ZijianTts", "Retrying capped continuation from the fixed voice reference");
-                            continue;
-                        }
-                        history.clear();
-                        List<NarrationPlanner.Unit> smaller = NarrationPlanner.retry(planned.unit, counter);
+                        int budget = Math.max(1, counter.count(planned.unit.text) / 2);
+                        List<String> smaller = OfficialNarration.split(planned.unit.text, counter::count, budget);
                         if (smaller.size() < 2) throw new IOException("这一句未能完整生成，请换一个声音后重试");
-                        for (int i = smaller.size() - 1; i >= 0; i--)
-                            units.addFirst(new Planned(smaller.get(i), planned.paragraph));
+                        List<OfficialNarration.Chunk> replacement = new ArrayList<>();
+                        for (int i = 0; i < smaller.size(); i++) {
+                            String part = smaller.get(i);
+                            int pause = i + 1 == smaller.size() ? planned.pauseSamples : OfficialNarration.pauseSamples(part);
+                            replacement.add(new OfficialNarration.Chunk(part, planned.paragraph, pause));
+                        }
+                        if (planned.plan != null) {
+                            // Only ungenerated suffixes are changed, so already
+                            // queued unit indices and saved positions stay valid.
+                            planned.plan.replace(planned.index, replacement);
+                            units.clear();
+                            for (int i = planned.index; i < planned.plan.chunks.size(); i++)
+                                units.addLast(new Planned(planned.plan.chunks.get(i), false, planned.plan, i));
+                        } else for (int i = replacement.size() - 1; i >= 0; i--) units.addFirst(new Planned(replacement.get(i), true));
                         count += smaller.size() - 1;
-                        android.util.Log.i("ZijianTts", "Retrying capped sentence at a smaller semantic boundary");
-                        continue;
-                    }
-                    catch (SpeechModelRuntime.RunawaySpeech runaway) {
-                        if (context == null) throw runaway;
-                        history.clear(); units.addFirst(new Planned(planned.unit, planned.paragraph, true));
-                        android.util.Log.i("ZijianTts", "Re-anchoring abnormal short continuation before playback");
+                        android.util.Log.i("ZijianTts", "Retrying capped official chunk at a smaller token budget");
                         continue;
                     }
                     check(token);
-                    if (continuous) history.accept(clip, context, counter);
-                    previous = clip;
                     buffer.generated(clip.activeMs, clip.durationMs);
                     if (clip.activeMs > 0) getSharedPreferences("tts-performance", MODE_PRIVATE).edit()
                         .putLong("ratio", Double.doubleToLongBits(buffer.ratio())).apply();
-                    ready.add(new Ready(clip, planned.paragraph)); pendingCache.add(clip.file.getName());
+                    ready.add(new Ready(clip, planned, chunkStart)); pendingCache.add(clip.file.getName());
                     done++;
                     preparing(token, title, wholeChapter, done, count);
                     if (!wholeChapter) {
@@ -315,6 +361,8 @@ public final class BookPlaybackService extends MediaSessionService {
                     NarrationCache.Clip clip = ready.clip;
                     Bundle extras = new Bundle(); extras.putInt("chapter", chapterIndex); extras.putInt("paragraph", ready.paragraph);
                     extras.putString("chapterTitle", title); extras.putString("text", clip.unit.text); extras.putLong("durationMs", clip.durationMs);
+                    extras.putString("plan", ready.plan); extras.putInt("unit", ready.index);
+                    extras.putString("rng", ready.random); extras.putLong("rngDraws", ready.draws);
                     items.add(new MediaItem.Builder().setUri(Uri.fromFile(clip.file)).setMediaId(clip.file.getName())
                         .setMediaMetadata(new MediaMetadata.Builder().setTitle(title).setArtist(bookTitle).setExtras(extras).build()).build());
                 }
@@ -341,14 +389,16 @@ public final class BookPlaybackService extends MediaSessionService {
     }
     private static final class FrameLimitException extends IOException {}
     private NarrationCache.Clip audio(int token, SynthesisGate gate, ModelRepository models, String selectedVoice,
-                                     NarrationPlanner.Unit unit, NarrationCache.Clip previous, NarrationContext.Window context) throws Exception {
+                                     Planned planned, OfficialRandom random) throws Exception {
+        NarrationPlanner.Unit unit = planned.unit;
         File directory = new File(getCacheDir(), "tts"); directory.mkdirs();
-        String name = NarrationCache.key(models.id, selectedVoice, unit, previous, context);
+        String name = NarrationCache.key(models.id, selectedVoice, unit, random, planned.pauseSamples);
         File destination = new File(directory, name + ".wav"), sidecar = new File(directory, name + ".codes");
         NarrationCache.Clip cached = NarrationCache.read(destination, sidecar, unit);
         if (cached != null) {
+            random.advance(cached.randomDraws);
             destination.setLastModified(System.currentTimeMillis());
-            android.util.Log.i("ZijianTts", "Reusing cached narration, contextUnits=" + (context == null ? 0 : context.units));
+            android.util.Log.i("ZijianTts", "Reusing official narration cache");
             return cached;
         }
         if (directory.getUsableSpace() < 64L * 1024 * 1024) throw new IOException("存储空间不足，请先释放至少 64 MiB 空间");
@@ -357,7 +407,7 @@ public final class BookPlaybackService extends MediaSessionService {
         synthesisWake.acquire(10 * 60 * 1000L);
         NarrationCache.Clip clip;
         try {
-            SynthesisResult result = SpeechModelRuntime.synthesize(this, unit.text, partial, selectedVoice, () -> {
+            SynthesisResult result = SpeechModelRuntime.synthesizeOfficial(this, unit.text, partial, selectedVoice, () -> {
                 check(token);
                 // Release the shared model at a checkpoint; retry the uncommitted phrase
                 // after guidance. Never block a paused narrator while holding ONNX.
@@ -365,20 +415,17 @@ public final class BookPlaybackService extends MediaSessionService {
                 gate.awaitModelReady(() -> { if (synthesisWake.isHeld()) synthesisWake.release(); },
                     () -> synthesisWake.acquire(10 * 60 * 1000L), SpeechModelRuntime::guidancePending);
                 check(token);
-            }, previous, context);
+            }, random, planned.pauseSamples);
             check(token);
             if (result.getGeneratedFrames() >= 375) throw new FrameLimitException();
             if (result.getDurationMs() <= 0 || !partial.renameTo(destination)) throw new IOException("音频文件保存失败");
             clip = new NarrationCache.Clip(destination, unit, result.getAudioCodes(), result.getDurationMs(), result.getElapsedMs(),
-                result.getRawLeading(), result.getRawTrailing(), result.getRetainedTail());
+                result.getRawLeading(), result.getRawTrailing(), result.getRetainedTail(), result.getRandomDraws());
             NarrationCache.write(partialCodes, clip);
             if (!partialCodes.renameTo(sidecar)) throw new IOException("语音缓存保存失败");
             android.util.Log.i("ZijianTts", "Generated " + clip.durationMs + "ms audio in " + clip.activeMs + "ms, voice="
-                + selectedVoice + ", ending=" + unit.ending + ", contextUnits=" + (context == null ? 0 : context.units)
-                + ", contextFrames=" + (context == null ? 0 : context.codes.size()) + ", edgeMs="
-                + clip.rawLeading / 48 + "/" + clip.rawTrailing / 48 + ", stagesMs="
-                + result.getPrefillMs() + "/" + result.getGenerationMs() + "/" + result.getCodecMs() + "/" + result.getVadMs()
-                + ", codecWarmFrames=" + result.getCodecWarmFrames() + ", retryMs=" + result.getRetryMs());
+                + selectedVoice + ", official=true, rngDraws=" + result.getRandomDraws()
+                + ", stagesMs=" + result.getPrefillMs() + "/" + result.getGenerationMs() + "/" + result.getCodecMs());
         } finally {
             partial.delete(); partialCodes.delete();
             if (synthesisWake.isHeld()) synthesisWake.release();
@@ -420,8 +467,10 @@ public final class BookPlaybackService extends MediaSessionService {
         snapshot = new JSObject().put("phase", phase).put("bookId", bookId).put("title", bookTitle)
             .put("chapter", chapter).put("paragraph", paragraph).put("chapterTitle", chapterTitle).put("text", text)
             .put("voice", voice).put("speed", speed).put("error", error)
-            .put("preparation", preparation).put("continuity", continuity).put("preparingChapterTitle", preparingChapterTitle)
+            .put("preparation", preparation).put("preparingChapterTitle", preparingChapterTitle)
             .put("preparedUnits", preparedUnits).put("totalUnits", totalUnits).put("bufferedSeconds", bufferedMs / 1000)
+            .put("pipeline", NarrationCache.REVISION).put("plan", playingPlan).put("unit", playingUnit)
+            .put("rng", playingRandom).put("rngDraws", playingDraws)
             .put("updatedAt", progressAt)
             .put("positionMs", player == null ? 0 : player.getCurrentPosition());
         if (!bookId.isEmpty() && (saveNow || SystemClock.elapsedRealtime() >= nextProgress)) {

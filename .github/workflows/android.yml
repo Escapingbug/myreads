@@ -35,9 +35,13 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run native:sync
+      - name: Build host text normalizer for official parity fixtures
+        run: |
+          cmake -S android/app/src/main/cpp -B artifacts/tts-native -DCMAKE_BUILD_TYPE=Release
+          cmake --build artifacts/tts-native --target zijian_tokenizer -j 4
       - name: Verify Android tests and APK
         working-directory: android
-        run: ./gradlew testDebugUnitTest assembleDebug --console=plain
+        run: ./gradlew testDebugUnitTest assembleDebug -PttsNativePath="$GITHUB_WORKSPACE/artifacts/tts-native" --console=plain
 
   release:
     if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
