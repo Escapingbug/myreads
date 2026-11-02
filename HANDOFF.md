@@ -413,3 +413,12 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 ## 0.3.14 发布准备（2026-11-02）
 
 用户要求重新发布Unicode正则兼容性修复。版本递增为0.3.14/code19，沿用既有签名和GitHub/Gitee双渠道流程。发布验证增加APK实际DEX中的 `OfficialText` 检查，要求只使用不带flags的 `Pattern.compile(String)`，在正式发布前拦截旧包/不兼容调用；另有主机Unicode规则回归。复用本轮73项主机测试及26块真实模型编码一致的证据；云端独立执行前端、主机JNI/FST和Android单元测试及双ABI构建。全程禁止模拟器/ADB，既有完整Lint的WebView API级别错误单独保留记录。
+
+## 0.3.14 GitHub 发布完成，Gitee延后（2026-11-02）
+
+- 用户授权“重新发布”，随后明确选择“先完成GitHub，稍后再同步Gitee”。版本0.3.14/code19，GitHub正式latest：<https://github.com/Escapingbug/myreads/releases/tag/v0.3.14>；源码标签 `5ba1ed5ff3da2eaffefde1b4b811bb0e6865020b`。修复0.3.13开始听书时Android拒绝UNICODE_CHARACTER_CLASS的错误，保留官方文本处理输出及模型采样。
+- 主分支 <https://github.com/Escapingbug/myreads/actions/runs/41411928463> 完整验证成功，包含126项前端测试、主机JNI/FST及Android单元测试、APK双ABI构建和新增DEX兼容性门禁。标签流水线 <https://github.com/Escapingbug/myreads/actions/runs/41411928815> 的验证、签名构建、签名/兼容性检查与GitHub正式发布均成功；其Gitee大文件上传停滞，按用户选择取消同步步骤，所以总流水线状态cancelled，不能说整条流水线success。签名材料清理步骤已执行，原签名保留。此前本机73项无跳过测试、26块真实模型对照仍是本次生成一致性依据，云端不携带大模型。
+- GitHub元数据、APK、update.json、SHA256SUMS均匿名下载核对。完整APK62,789,594 bytes，SHA-256 `63b83cd071d6ee559fb6b25fcc9b69e44c9e7789eaa2a55c8a178986b4887307`，与更新清单和GitHub资产摘要一致。证书SHA-256 `a0abb5c432d5ada068efe059a63c1ec4adef40754a915559e0520538124c1112` 与0.3.13一致，包名io.myreads.app，非调试，minSdk24，arm64-v8a/x86_64，16KB ZIP/ELF对齐通过。公开APK的OfficialText只调用不带flags的Pattern.compile(String)，不再有旧的两个compile(String,int)；FST哈希、新JNI、前端版本、模型目录清单与渠道配置核对通过，大模型未随包分发。
+- 实际应用parseUpdate/selectUpdate处理匿名线上数据，确认新版0.3.14/code19，选择GitHub；Gitee0.3.14预发布被拒绝，旧正式0.3.13不会作为新版同文件备用。应用自动来源可取GitHub新版，若用户手动固定Gitee则须切为自动/GitHub或直接下载。
+- Gitee0.3.14保留预发布id1266134，仅SHA256SUMS已上传，APK和update.json尚待上传；0.3.13仍是Gitee正式最新版。用户正在使用Edge时工具阻止输入，未继续干扰网页；用户选择延后，不安排未请求的定时任务。后续用户要求同步时复用 `release/zijian-0.3.14.apk`、`release/update.json`、`release/SHA256SUMS`，在现有预发布补齐附件，匿名验证后转正式，不能重新构建或替换GitHub正式文件。
+- 验证与日志在 `artifacts/release-0.3.14/verification.json`、`live-update-logic.json`；正式文件在 `release/`，均不提交。全程未用模拟器、ADB或安装应用；真机听书仍待用户复测。原有完整Lint的WebView API级别错误未作无关改动，未宣称Lint通过。
