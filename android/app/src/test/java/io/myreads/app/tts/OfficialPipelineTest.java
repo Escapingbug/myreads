@@ -40,6 +40,19 @@ public class OfficialPipelineTest {
             assertEquals(decode(fields[0]), decode(fields[1]), OfficialText.robust(decode(fields[0])));
         }
     }
+    @Test public void unicodeRulesNeedNoFlagsAndPreserveClassesInsideNegatedSets() {
+        // Android's Pattern constructor rejects flag 0x100. Desktop Java accepts
+        // it, so successful host normalization alone cannot catch this failure.
+        java.util.regex.Pattern spaces = OfficialText.pattern("\\s+");
+        assertEquals(0, spaces.flags());
+        assertTrue(spaces.matcher("\t\u0085\u00a0\u1680\u2007\u2028\u202f\u3000").matches());
+        assertFalse(spaces.matcher("\u200b").matches());
+        assertTrue(OfficialText.pattern("[^\\s-]+").matcher("中文١").matches());
+        assertFalse(OfficialText.pattern("[^\\s-]+").matcher("中\u00a0文").matches());
+        assertTrue(OfficialText.pattern("\\d+").matcher("١२３").matches());
+        assertTrue(OfficialText.pattern("\\w+").matcher("中é\u0301\u2160\u203f\u200c").matches());
+        assertFalse(OfficialText.pattern("(?<![\\w.+-])x").matcher("中x").find());
+    }
     @Test public void cacheHitRestoresTheExactNextChunkSamplingPosition() throws Exception {
         File wav = folder.newFile(), sidecar = folder.newFile(); Files.write(wav.toPath(), new byte[100]);
         List<int[]> codes = new ArrayList<>(); for (int i = 0; i < 267; i++) codes.add(new int[16]);

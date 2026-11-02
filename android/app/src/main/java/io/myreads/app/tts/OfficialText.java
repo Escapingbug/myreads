@@ -11,12 +11,20 @@ public final class OfficialText {
     private static final String PROT = "___PROT\\d+___";
     private static final String LATIN = "(?:" + PROT + "|(?=[A-Za-z0-9._/+:-]*[A-Za-z])[A-Za-z0-9][A-Za-z0-9._/+:-]*)";
     private static final String CLOSERS = "\"')]}）】》〉」』”’";
-    private static final int FLAGS = Pattern.UNICODE_CHARACTER_CLASS;
+    // Android rejects UNICODE_CHARACTER_CLASS even though its regex engine is
+    // Unicode-aware by default. Spell these classes out so Android and host-JVM
+    // parity tests use the same rules without any platform-specific flags.
+    private static final String SPACE = "[\\u0009-\\u000d\\u0020\\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]";
+    private static final String WORD = "[\\p{L}\\p{Nl}\\p{M}\\p{Nd}\\p{Pc}\\u200c\\u200d]";
+    static Pattern pattern(String regex) {
+        // These are fixed internal rules, not patterns supplied by a book.
+        return Pattern.compile(regex.replace("\\s", SPACE).replace("\\d", "\\p{Nd}").replace("\\w", WORD));
+    }
     private static String sub(String text, String regex, String replacement) {
-        return Pattern.compile(regex, FLAGS).matcher(text).replaceAll(replacement);
+        return pattern(regex).matcher(text).replaceAll(replacement);
     }
     private static String replace(String text, String regex, Function<MatchResult, String> f) {
-        Matcher m = Pattern.compile(regex, FLAGS).matcher(text); StringBuffer out = new StringBuffer();
+        Matcher m = pattern(regex).matcher(text); StringBuffer out = new StringBuffer();
         while (m.find()) m.appendReplacement(out, Matcher.quoteReplacement(f.apply(m.toMatchResult())));
         m.appendTail(out); return out.toString();
     }

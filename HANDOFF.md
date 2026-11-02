@@ -399,3 +399,17 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - 两渠道匿名下载的完整 APK、update.json 和 SHA256SUMS 逐字节一致：APK 62,789,590 bytes，SHA-256 `2fc3a1a938dd2523651d8d45b1ea974ee4a252776f6ba7e70ffd9461dacb6d76`，与 GitHub 资产摘要一致。原签名证书SHA-256 `a0abb5c432d5ada068efe059a63c1ec4adef40754a915559e0520538124c1112` 与0.3.12一致，非调试、包名io.myreads.app、arm64-v8a/x86_64、minSdk24；16KB ZIP/ELF对齐通过。静态核对新JNI、四个FST哈希、新采样/持久化计划类及缓存revision进入包，旧混合历史类和测试资源未打包，前端0.3.13与移除的衔接开关相符。模型目录清单、VAD、更新渠道配置与旧版逐字节一致，无需重新下载模型。
 - 云端126项前端测试、主机JNI/FST文本夹具、Android主机测试与APK构建通过。真实大模型26块对照沿用此前本机72项无跳过测试证据，云端因未提供外部大模型而跳过该可选测试，不能宣称云端执行了真实模型对照。实际应用的parseUpdate/selectUpdate逻辑处理发布元数据和匿名更新清单，识别0.3.13/code18，选择Gitee且以同一哈希的GitHub地址备用。本机共享出口IP的GitHub匿名API配额已耗尽（403），GitHub发行元数据通过gh授权读取，三份公开下载文件仍全部匿名验证；Gitee发行信息也匿名验证。
 - 发布与验证记录在 `artifacts/release-0.3.13/verification.json`、`live-update-logic.json` 和对应云端日志；正式文件在 `release/`（均不提交）。未使用模拟器、ADB 或安装应用。用户可在设置→应用更新检查0.3.13，或手动覆盖安装；书架、阅读进度和模型保留。实体设备长时间后台播放、性能与听感仍保留真机验证边界。
+
+## Android Unicode 正则兼容性修复（2026-11-02，未发布）
+
+用户反馈听书不能使用，显示“UNICODE_CHARACTER_CLASS fl...”报错。定位为0.3.13新增的 `OfficialText` 在正文文本预处理的首次正则替换中传入 `Pattern.UNICODE_CHARACTER_CLASS`（0x100）。Android官方文档明确该选项不受支持，Android默认已使用Unicode字符类；AOSP Android 15源码会抛出 `IllegalArgumentException("UNICODE_CHARACTER_CLASS flag not supported")`，与用户报错前缀一致；Android 7源码也拒绝此位。静态反汇编实际0.3.13正式APK，确认 `OfficialText.sub` / `replace` 两处调用 `Pattern.compile(String,int)` 且参数为256。因此失败发生于正文规划、音频生成之前，不是模型文件损坏或生成语速问题。
+
+此前桌面JVM的单元测试和真实模型对照使用OpenJDK；该实现接受此选项，所以未能发现Android兼容性缺陷。修复移除显式flag，将内部固定正则的Unicode空白、数字、词字符展开为两端均支持的显式字符类；不依赖运行平台检测或异常后回退。新增回归约束实际规则flags为0，并覆盖非ASCII空白/数字、组合标记、连接符、否定字符类及前后文边界；既有55组官方文本夹具仍逐项一致。证据与构建文件放在 `artifacts/android-regex-fix/`（不提交）。
+
+依据：<https://developer.android.com/reference/java/util/regex/Pattern#UNICODE_CHARACTER_CLASS>；AOSP固定源码 <https://android.googlesource.com/platform/libcore/+/refs/tags/android-15.0.0_r1/ojluni/src/main/java/java/util/regex/Pattern.java>。本轮未使用模拟器/ADB，也不把主机验证表述为真机端到端验证。
+
+修复验证：73项Android主机测试全部通过且无跳过；新规则下悦文/俊豪26个长篇块的实际Kotlin模型编码仍与官方逐帧一致，16位PCM最大差1个量化单位。`assembleDebug` 完成，固定测试包 `artifacts/android-regex-fix/zijian-regex-fix-debug.apk` 为69,339,391 bytes、SHA-256 `0790d7085b9c43e2b3244b172bbd9b73c31404df45b8ff488315ee80627e19a8`。签名/16KB ZIP对齐、FST哈希验证通过；DEX确认 `OfficialText` 只调用不带flags的 `Pattern.compile(String)`，不再包含旧的两处带flags调用。完整 `lintDebug` 未通过：唯一错误为已有 `MainActivity.java:29` 在WebView渲染进程退出回调中调用API26的 `RenderProcessGoneDetail.didCrash`（minSdk24），与本次正则修复无关；本轮未修改该处，不宣称完整Lint通过。详细记录 `artifacts/android-regex-fix/verification.json`。未修改版本号、提交、推送或发布；正式0.3.13仍包含此缺陷，安装新修复包才能解决。
+
+## 0.3.14 发布准备（2026-11-02）
+
+用户要求重新发布Unicode正则兼容性修复。版本递增为0.3.14/code19，沿用既有签名和GitHub/Gitee双渠道流程。发布验证增加APK实际DEX中的 `OfficialText` 检查，要求只使用不带flags的 `Pattern.compile(String)`，在正式发布前拦截旧包/不兼容调用；另有主机Unicode规则回归。复用本轮73项主机测试及26块真实模型编码一致的证据；云端独立执行前端、主机JNI/FST和Android单元测试及双ABI构建。全程禁止模拟器/ADB，既有完整Lint的WebView API级别错误单独保留记录。

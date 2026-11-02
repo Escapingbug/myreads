@@ -2,7 +2,7 @@
 
 Android 小说阅读器，支持动态书源、搜索、章节下载、离线阅读和本地听书。
 
-[国内下载 APK](https://gitee.com/anciety/myreads/releases/latest) · [GitHub 备用下载](https://github.com/escapingbug/myreads/releases/latest) · [版本说明](docs/releases/0.3.13.md)
+[国内下载 APK](https://gitee.com/anciety/myreads/releases/latest) · [GitHub 备用下载](https://github.com/escapingbug/myreads/releases/latest) · [版本说明](docs/releases/0.3.14.md)
 
 ## 使用
 
@@ -18,9 +18,13 @@ Android 小说阅读器，支持动态书源、搜索、章节下载、离线阅
 
 0.2.x 的用户首次需要手动覆盖安装 0.3.0；后续版本可从 App 内更新。无需卸载。
 
+## 0.3.14 听书兼容性修复
+
+修复0.3.13开始听书时出现“UNICODE_CHARACTER_CLASS flag not supported”并停止的问题。保留官方生成流程和已有模型，无需清理书架或重新下载模型。
+
 ## 0.3.13 官方听书流程
 
-针对句内语速不一致、异常停顿和重复朗读，将正文生成迁移到实际试听效果更好的完整官方 ONNX 流程。更新会重新生成语音缓存，已下载模型、书架和阅读进度保留；不再提供“跨句衔接”开关。具体变化见[版本说明](docs/releases/0.3.13.md)。
+针对句内语速不一致、异常停顿和重复朗读，将正文生成迁移到实际试听效果更好的完整官方 ONNX 流程。更新会重新生成语音缓存，已下载模型、书架和阅读进度保留；不再提供“跨句衔接”开关。具体变化见[版本说明](docs/releases/0.3.14.md)。
 
 ## 0.3.12 推荐与简单听书
 
