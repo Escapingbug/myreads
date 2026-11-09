@@ -22,6 +22,8 @@ Android 小说阅读器，支持动态书源、搜索、章节下载、离线阅
 
 修复0.3.13开始听书时出现“UNICODE_CHARACTER_CLASS flag not supported”并停止的问题。保留官方生成流程和已有模型，无需清理书架或重新下载模型。
 
+GitHub 与 Gitee 均已正式发布。可[直接下载 Gitee 0.3.14 APK](https://gitee.com/anciety/myreads/releases/download/v0.3.14/zijian-0.3.14.apk)，或在应用更新中选择“自动”／“Gitee”检查更新。
+
 ## 0.3.13 官方听书流程
 
 针对句内语速不一致、异常停顿和重复朗读，将正文生成迁移到实际试听效果更好的完整官方 ONNX 流程。更新会重新生成语音缓存，已下载模型、书架和阅读进度保留；不再提供“跨句衔接”开关。具体变化见[版本说明](docs/releases/0.3.14.md)。

@@ -422,3 +422,10 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - 实际应用parseUpdate/selectUpdate处理匿名线上数据，确认新版0.3.14/code19，选择GitHub；Gitee0.3.14预发布被拒绝，旧正式0.3.13不会作为新版同文件备用。应用自动来源可取GitHub新版，若用户手动固定Gitee则须切为自动/GitHub或直接下载。
 - Gitee0.3.14保留预发布id1266134，仅SHA256SUMS已上传，APK和update.json尚待上传；0.3.13仍是Gitee正式最新版。用户正在使用Edge时工具阻止输入，未继续干扰网页；用户选择延后，不安排未请求的定时任务。后续用户要求同步时复用 `release/zijian-0.3.14.apk`、`release/update.json`、`release/SHA256SUMS`，在现有预发布补齐附件，匿名验证后转正式，不能重新构建或替换GitHub正式文件。
 - 验证与日志在 `artifacts/release-0.3.14/verification.json`、`live-update-logic.json`；正式文件在 `release/`，均不提交。全程未用模拟器、ADB或安装应用；真机听书仍待用户复测。原有完整Lint的WebView API级别错误未作无关改动，未宣称Lint通过。
+
+## 0.3.14 Gitee 正式发布完成（2026-11-09）
+
+- 用户要求将Gitee版本正式发布。发布前匿名检查发现APK、update.json和SHA256SUMS均已有附件，完整APK62,789,594 bytes、SHA-256 `63b83cd071d6ee559fb6b25fcc9b69e44c9e7789eaa2a55c8a178986b4887307` 与GitHub正式文件一致，但仍为预发布。
+- 触发既有「Retry Gitee release sync」工作流，run <https://github.com/Escapingbug/myreads/actions/runs/42589498395> 成功。流程下载GitHub原签名文件，复用Gitee已有附件，逐项匿名校验后将id1266134改为prerelease=false；没有重新构建、重复上传或替换公开APK。匿名发行版API确认v0.3.14已正式发布。
+- 实际应用parseUpdate/selectUpdate读取两渠道当前元数据与公开更新清单，确认0.3.14/code19，自动优先Gitee、GitHub作为同一大小/哈希文件的备用来源。主机GitHub匿名元数据API返回403，因此仅GitHub元数据经gh授权读取；Gitee元数据、两渠道清单与附件校验仍匿名执行。结果为 `artifacts/release-0.3.14/live-update-logic.json`，工作流日志为 `gitee-publication-workflow.log`，发布记录补充到 `verification.json`。
+- 国内APK直链：<https://gitee.com/anciety/myreads/releases/download/v0.3.14/zijian-0.3.14.apk>。无需卸载或重新下载模型，应用更新来源“自动”或“Gitee”均可使用。全程未使用模拟器、ADB或安装应用；本次仅完成渠道发布，不增加真机听书验证结论。

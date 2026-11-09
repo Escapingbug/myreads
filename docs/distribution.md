@@ -71,8 +71,8 @@ Gitee 实际 CDN 为 foruda.gitee.com。0.3.11 发布验证时的 Range 请求�
 
 0.3.13 的 Gitee API 大文件上传同样停滞，已主动取消同步阶段，使用现有网页会话上传同一签名文件，再由同步工作流匿名验证并转正式（run40293733172成功）。没有重新构建 APK。
 
-## 0.3.14 渠道状态（2026-11-02）
+## 0.3.14 渠道状态（2026-11-09）
 
 0.3.14/code19 已在 [GitHub](https://github.com/Escapingbug/myreads/releases/tag/v0.3.14) 正式发布，修复Android听书的Unicode正则选项错误。公开APK、更新清单和校验文件已匿名核对，原签名一致；APK为62,789,594 bytes，SHA-256 `63b83cd071d6ee559fb6b25fcc9b69e44c9e7789eaa2a55c8a178986b4887307`。新增门禁直接检查安装包中的正则调用，公开APK已确认包含修复。
 
-按用户要求，Gitee同步延后。0.3.14在Gitee保持未完成的预发布，不会被应用选中；Gitee正式最新版仍为0.3.13。更新来源选择“自动”或“GitHub”可获取0.3.14，固定Gitee的用户可切换来源或直接下载GitHub安装包。后续同步须复用相同签名文件并匿名校验后转正式。
+Gitee 已完成同步并转为正式版（id1266134，prerelease=false）。[同步流水线](https://github.com/Escapingbug/myreads/actions/runs/42589498395)复用已有附件，匿名下载 APK、update.json 和 SHA256SUMS，确认与 GitHub 原签名文件完全一致后公开；没有重新构建或替换文件。可[直接下载 Gitee APK](https://gitee.com/anciety/myreads/releases/download/v0.3.14/zijian-0.3.14.apk)。实际应用更新解析与选择逻辑确认0.3.14/code19，自动模式优先Gitee，GitHub作为同一文件的备用来源；固定Gitee也可获取新版。验证主机的GitHub匿名元数据API返回403，改用gh授权读取元数据，更新清单和附件仍匿名验证。全程未使用模拟器或ADB。
