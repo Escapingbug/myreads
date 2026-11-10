@@ -7,7 +7,7 @@ import java.util.*;
 
 /** Cache WAV with its structural timing and generated-code provenance. */
 final class NarrationCache {
-    static final String REVISION = "narration-official-onnx-v6";
+    static final String REVISION = "bertvits-mnn-22k-v1";
     static final class Clip {
         final File file;
         final NarrationPlanner.Unit unit;
@@ -44,7 +44,7 @@ final class NarrationCache {
         try (DataInputStream in = new DataInputStream(new BufferedInputStream(new FileInputStream(sidecar)))) {
             if (in.readInt() != 0x5a4e4332 || in.readLong() != wav.length() || wav.length() <= 44) return null;
             long duration = in.readLong(); int lead = in.readInt(), tail = in.readInt(), retained = in.readInt(), count = in.readInt(); long draws = in.readLong();
-            if (draws != (count + 1L) * 17 || count < 1 || count >= 375 || duration <= 0 || duration > 35000 || lead < 0 || tail < 0 || retained < 0
+            if (!(count == 0 && draws == 0 || count > 0 && draws == (count + 1L) * 17) || count < 0 || count >= 375 || duration <= 0 || duration > 35000 || lead < 0 || tail < 0 || retained < 0
                 || lead > 1440000 || tail > 1440000 || retained > tail) return null;
             List<int[]> codes = new ArrayList<>();
             for (int i = 0; i < count; i++) { int[] row = new int[16]; for (int j = 0; j < 16; j++) { row[j] = in.readUnsignedShort(); if (row[j] >= 1024) return null; } codes.add(row); }

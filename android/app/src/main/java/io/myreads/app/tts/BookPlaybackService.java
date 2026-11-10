@@ -31,13 +31,14 @@ public final class BookPlaybackService extends MediaSessionService {
     private PowerManager.WakeLock synthesisWake;
     private volatile int generation;
     private volatile long bufferedMs;
+    private volatile long lastGenerationMs, lastGeneratedAudioMs;
     private final Set<String> pendingCache = ConcurrentHashMap.newKeySet();
     private String preparation = "", preparingChapterTitle = "";
     private int preparedUnits, totalUnits;
     private volatile boolean producing;
     private volatile boolean wantsPlayback = true;
     private volatile SynthesisGate synthesisGate = new SynthesisGate();
-    private String bookId = "", bookTitle = "", chapterTitle = "", voice = "Junhao", error = "", phase = "idle", text = "";
+    private String bookId = "", bookTitle = "", chapterTitle = "", voice = "bili22", error = "", phase = "idle", text = "";
     private int chapter, paragraph;
     private volatile float speed = 1;
     private String playingPlan = "", playingRandom = "";
@@ -158,6 +159,7 @@ public final class BookPlaybackService extends MediaSessionService {
         SynthesisGate gate = new SynthesisGate(); synthesisGate = gate;
         producing = true; wantsPlayback = true; error = ""; phase = "loading";
         audioUnderruns = 0; nextUnderrunLog = 0;
+        lastGenerationMs = lastGeneratedAudioMs = 0;
         bookId = intent.getStringExtra("bookId"); bookTitle = intent.getStringExtra("title");
         chapter = intent.getIntExtra("chapter", 0); paragraph = intent.getIntExtra("paragraph", 0);
         progressAt = System.currentTimeMillis();
@@ -194,7 +196,7 @@ public final class BookPlaybackService extends MediaSessionService {
         Planned(OfficialNarration.Chunk chunk, boolean title) { this(chunk, title, null, -1); }
         Planned(OfficialNarration.Chunk chunk, boolean title, NarrationPlan plan, int index) {
             this.unit = new NarrationPlanner.Unit(chunk.text, title ? NarrationPlanner.Boundary.TITLE
-                : chunk.pauseSamples == 0 ? NarrationPlanner.Boundary.CHAPTER : NarrationPlanner.Boundary.SENTENCE, false);
+                : NarrationPlanner.Boundary.SENTENCE, false);
             this.paragraph = chunk.paragraph; this.pauseSamples = chunk.pauseSamples; this.title = title;
             this.plan = plan; this.index = index;
         }
@@ -222,7 +224,7 @@ public final class BookPlaybackService extends MediaSessionService {
                 catch (Exception failure) { throw new IllegalStateException(failure); }
             };
             NarrationBuffer buffer = new NarrationBuffer(mode == null ? "stream" : mode,
-                Double.longBitsToDouble(getSharedPreferences("tts-performance", MODE_PRIVATE).getLong("ratio", 0)));
+                Double.longBitsToDouble(getSharedPreferences("tts-performance-" + models.id, MODE_PRIVATE).getLong("ratio", 0)));
             JSONObject metadata = new JSONObject(LocalTtsFiles.text(new File(getFilesDir(), "tts-books/" + activeBook + ".json")));
             JSONArray chapters = metadata.getJSONArray("chapters");
             for (int ch = startChapter; ch < chapters.length(); ch++) {
@@ -264,7 +266,7 @@ public final class BookPlaybackService extends MediaSessionService {
                     List<OfficialNarration.Paragraph> heading = Collections.singletonList(new OfficialNarration.Paragraph(title, 0));
                     for (OfficialNarration.Chunk chunk : SpeechModelRuntime.planChapter(this, heading, selectedVoice))
                         units.add(new Planned(new OfficialNarration.Chunk(chunk.text, 0,
-                            chunk.pauseSamples == 0 ? OfficialNarration.pauseSamples(chunk.text) : chunk.pauseSamples), true));
+                            0), true));
                 }
                 for (int i = firstUnit; i < plan.chunks.size(); i++) units.add(new Planned(plan.chunks.get(i), false, plan, i));
                 if (units.isEmpty()) throw new IOException("这一章没有可朗读的内容");
@@ -294,7 +296,7 @@ public final class BookPlaybackService extends MediaSessionService {
                         List<OfficialNarration.Chunk> replacement = new ArrayList<>();
                         for (int i = 0; i < smaller.size(); i++) {
                             String part = smaller.get(i);
-                            int pause = i + 1 == smaller.size() ? planned.pauseSamples : OfficialNarration.pauseSamples(part);
+                            int pause = 0;
                             replacement.add(new OfficialNarration.Chunk(part, planned.paragraph, pause));
                         }
                         if (planned.plan != null) {
@@ -306,13 +308,16 @@ public final class BookPlaybackService extends MediaSessionService {
                                 units.addLast(new Planned(planned.plan.chunks.get(i), false, planned.plan, i));
                         } else for (int i = replacement.size() - 1; i >= 0; i--) units.addFirst(new Planned(replacement.get(i), true));
                         count += smaller.size() - 1;
-                        android.util.Log.i("ZijianTts", "Retrying capped official chunk at a smaller token budget");
+                        android.util.Log.i("ZijianTts", "Retrying oversized BertVITS chunk at a smaller token budget");
                         continue;
                     }
                     check(token);
                     buffer.generated(clip.activeMs, clip.durationMs);
-                    if (clip.activeMs > 0) getSharedPreferences("tts-performance", MODE_PRIVATE).edit()
-                        .putLong("ratio", Double.doubleToLongBits(buffer.ratio())).apply();
+                    if (clip.activeMs > 0) {
+                        lastGenerationMs = clip.activeMs; lastGeneratedAudioMs = clip.durationMs;
+                        getSharedPreferences("tts-performance-" + models.id, MODE_PRIVATE).edit()
+                            .putLong("ratio", Double.doubleToLongBits(buffer.ratio())).apply();
+                    }
                     ready.add(new Ready(clip, planned, chunkStart)); pendingCache.add(clip.file.getName());
                     done++;
                     preparing(token, title, wholeChapter, done, count);
@@ -398,7 +403,7 @@ public final class BookPlaybackService extends MediaSessionService {
         if (cached != null) {
             random.advance(cached.randomDraws);
             destination.setLastModified(System.currentTimeMillis());
-            android.util.Log.i("ZijianTts", "Reusing official narration cache");
+            android.util.Log.i("ZijianTts", "Reusing BertVITS narration cache");
             return cached;
         }
         if (directory.getUsableSpace() < 64L * 1024 * 1024) throw new IOException("存储空间不足，请先释放至少 64 MiB 空间");
@@ -410,7 +415,7 @@ public final class BookPlaybackService extends MediaSessionService {
             SynthesisResult result = SpeechModelRuntime.synthesizeOfficial(this, unit.text, partial, selectedVoice, () -> {
                 check(token);
                 // Release the shared model at a checkpoint; retry the uncommitted phrase
-                // after guidance. Never block a paused narrator while holding ONNX.
+                // after guidance. Never block a paused narrator while holding MNN.
                 SpeechModelRuntime.checkNarration(gate);
                 gate.awaitModelReady(() -> { if (synthesisWake.isHeld()) synthesisWake.release(); },
                     () -> synthesisWake.acquire(10 * 60 * 1000L), SpeechModelRuntime::guidancePending);
@@ -424,7 +429,7 @@ public final class BookPlaybackService extends MediaSessionService {
             NarrationCache.write(partialCodes, clip);
             if (!partialCodes.renameTo(sidecar)) throw new IOException("语音缓存保存失败");
             android.util.Log.i("ZijianTts", "Generated " + clip.durationMs + "ms audio in " + clip.activeMs + "ms, voice="
-                + selectedVoice + ", official=true, rngDraws=" + result.getRandomDraws()
+                + selectedVoice + ", engine=bertvits-mnn, rngDraws=" + result.getRandomDraws()
                 + ", stagesMs=" + result.getPrefillMs() + "/" + result.getGenerationMs() + "/" + result.getCodecMs());
         } finally {
             partial.delete(); partialCodes.delete();
@@ -469,6 +474,7 @@ public final class BookPlaybackService extends MediaSessionService {
             .put("voice", voice).put("speed", speed).put("error", error)
             .put("preparation", preparation).put("preparingChapterTitle", preparingChapterTitle)
             .put("preparedUnits", preparedUnits).put("totalUnits", totalUnits).put("bufferedSeconds", bufferedMs / 1000)
+            .put("generationMs", lastGenerationMs).put("generatedAudioMs", lastGeneratedAudioMs)
             .put("pipeline", NarrationCache.REVISION).put("plan", playingPlan).put("unit", playingUnit)
             .put("rng", playingRandom).put("rngDraws", playingDraws)
             .put("updatedAt", progressAt)

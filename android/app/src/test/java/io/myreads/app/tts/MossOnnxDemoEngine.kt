@@ -212,11 +212,8 @@ class MossOnnxDemoEngine(
     }
 
     private fun runDecode(prefillResult: PrefillResult, maxFrames: Int, random: OfficialRandom, checkpoint: SynthesisCheckpoint): List<IntArray> {
-        val cfg = manifest.ttsConfig
         val audioTokens = ArrayList<IntArray>()
-        val rowWidth = cfg.nVq + 1
         val cappedMaxFrames = maxFrames.coerceAtMost(manifest.generationDefaults.maxNewFrames)
-        val previousTokenSets = Array(cfg.nVq) { HashSet<Int>() }
         val decodePastInputNames = ttsMeta.onnx.decodeInputNames.drop(2)
         val decodePresentOutputNames = ttsMeta.onnx.decodeOutputNames.drop(1)
         var pastValidLengths = prefillResult.pastValidLengths
@@ -224,49 +221,26 @@ class MossOnnxDemoEngine(
         var pastResult: OrtSession.Result? = prefillResult.pastResult
 
         try {
-            for (step in 0 until cappedMaxFrames) {
-                if (cancelled || Thread.currentThread().isInterrupted) throw InterruptedException("听书已停止")
-                checkpoint.awaitReady()
-                val frameResult = runLocalFixedSampledFrame(globalHidden, previousTokenSets, random)
-                if (!frameResult.shouldContinue) {
-                    break
-                }
-                val audioRow = IntArray(rowWidth) { index ->
-                    if (index == 0) cfg.audioAssistantSlotTokenId else cfg.audioPadTokenId
-                }
-                for (quantizer in 0 until cfg.nVq) {
-                    val token = frameResult.frame[quantizer]
-                    audioRow[quantizer + 1] = token
-                    previousTokenSets[quantizer].add(token)
-                }
-                audioTokens += frameResult.frame
-                OnnxTensor.createTensor(
-                    env,
-                    IntBuffer.wrap(audioRow),
-                    longArrayOf(1, 1, rowWidth.toLong()),
-                ).use { inputTensor ->
-                    OnnxTensor.createTensor(
-                        env,
-                        IntBuffer.wrap(intArrayOf(pastValidLengths)),
-                        longArrayOf(1),
-                    ).use { pastTensor ->
-                        val feeds = linkedMapOf<String, OnnxTensorLike>(
-                            "input_ids" to inputTensor,
-                            "past_valid_lengths" to pastTensor,
-                        )
-                        val previousPastResult = pastResult ?: error("Missing decode KV cache")
-                        for (index in decodePastInputNames.indices) {
-                            feeds[decodePastInputNames[index]] =
-                                previousPastResult.requiredTensor(decodePresentOutputNames[index])
-                        }
-                        val outputs = decodeSession.run(feeds)
-                        val nextGlobalHidden = extractLastHiddenTensor(outputs.requiredTensor("global_hidden"))
-                        globalHidden.close()
-                        previousPastResult.close()
-                        pastResult = outputs
-                        globalHidden = nextGlobalHidden
-                        pastValidLengths += 1
+            DecodeInputs().use { inputs ->
+                for (step in 0 until cappedMaxFrames) {
+                    if (cancelled || Thread.currentThread().isInterrupted) throw InterruptedException("听书已停止")
+                    checkpoint.awaitReady()
+                    val frameResult = runLocalFixedSampledFrame(globalHidden, inputs, random)
+                    if (!frameResult.shouldContinue) break
+                    inputs.advance(frameResult.frame, pastValidLengths)
+                    audioTokens += frameResult.frame
+                    val previousPastResult = pastResult ?: error("Missing decode KV cache")
+                    for (index in decodePastInputNames.indices) {
+                        inputs.decodeFeeds[decodePastInputNames[index]] =
+                            previousPastResult.requiredTensor(decodePresentOutputNames[index])
                     }
+                    val outputs = decodeSession.run(inputs.decodeFeeds)
+                    val nextGlobalHidden = extractLastHiddenTensor(outputs.requiredTensor("global_hidden"))
+                    globalHidden.close()
+                    previousPastResult.close()
+                    pastResult = outputs
+                    globalHidden = nextGlobalHidden
+                    pastValidLengths += 1
                 }
             }
         } finally {
@@ -278,50 +252,60 @@ class MossOnnxDemoEngine(
 
     private fun runLocalFixedSampledFrame(
         globalHidden: OnnxTensor,
-        previousTokenSets: Array<HashSet<Int>>,
+        inputs: DecodeInputs,
         random: OfficialRandom,
     ): LocalFrameResult {
-        val cfg = manifest.ttsConfig
-        val audioCodebookSize = cfg.audioCodebookSizes.firstOrNull() ?: 1024
-        val seenMask = IntArray(cfg.nVq * audioCodebookSize)
-        for (channelIndex in previousTokenSets.indices) {
-            val channelOffset = channelIndex * audioCodebookSize
-            for (tokenId in previousTokenSets[channelIndex]) {
-                if (tokenId in 0 until audioCodebookSize) {
-                    seenMask[channelOffset + tokenId] = 1
-                }
-            }
+        inputs.sample(random)
+        inputs.localFeeds["global_hidden"] = globalHidden
+        localFixedFrameSession.run(inputs.localFeeds).use {
+            return LocalFrameResult(
+                shouldContinue = it.requiredTensor("should_continue").scalarInt() > 0,
+                frame = it.requiredTensor("frame_token_ids").intArrayValue(),
+            )
         }
-        val assistantRandom = floatArrayOf(random.nextFloat())
-        val audioRandom = FloatArray(cfg.nVq) { random.nextFloat() }
-        OnnxTensor.createTensor(
-            env,
-            IntBuffer.wrap(seenMask),
-            longArrayOf(1, cfg.nVq.toLong(), audioCodebookSize.toLong()),
-        ).use { seenTensor ->
-            OnnxTensor.createTensor(env, FloatBuffer.wrap(assistantRandom), longArrayOf(1)).use { assistantTensor ->
-                OnnxTensor.createTensor(
-                    env,
-                    FloatBuffer.wrap(audioRandom),
-                    longArrayOf(1, cfg.nVq.toLong()),
-                ).use { audioTensor ->
-                    val outputs = localFixedFrameSession.run(
-                        mapOf(
-                            "global_hidden" to globalHidden,
-                            "repetition_seen_mask" to seenTensor,
-                            "assistant_random_u" to assistantTensor,
-                            "audio_random_u" to audioTensor,
-                        ),
-                    )
-                    outputs.use {
-                        return LocalFrameResult(
-                            shouldContinue = it.requiredTensor("should_continue").scalarInt() > 0,
-                            frame = it.requiredTensor("frame_token_ids").intArrayValue(),
-                        )
-                    }
-                }
-            }
+    }
+
+    /** Fixed-shape inputs live for one request, including cooperative pauses.
+     * Direct buffers update the same native tensors without copying/reallocating
+     * a 16 x 1024 repetition mask and five tensors on every audio frame.
+     * Each independent request starts with an empty mask and fresh inputs.
+     */
+    private inner class DecodeInputs : Closeable {
+        private val cfg = manifest.ttsConfig
+        private val codebookSize = cfg.audioCodebookSizes.firstOrNull() ?: 1024
+        private val seen = ByteBuffer.allocateDirect(cfg.nVq * codebookSize * 4).order(ByteOrder.nativeOrder()).asIntBuffer()
+        private val row = ByteBuffer.allocateDirect((cfg.nVq + 1) * 4).order(ByteOrder.nativeOrder()).asIntBuffer()
+        private val length = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder()).asIntBuffer()
+        private val assistant = ByteBuffer.allocateDirect(4).order(ByteOrder.nativeOrder()).asFloatBuffer()
+        private val audio = ByteBuffer.allocateDirect(cfg.nVq * 4).order(ByteOrder.nativeOrder()).asFloatBuffer()
+        private val tensors = mutableListOf<OnnxTensor>()
+        val localFeeds = linkedMapOf<String, OnnxTensorLike>()
+        val decodeFeeds = linkedMapOf<String, OnnxTensorLike>()
+        init {
+            try {
+                row.put(0, cfg.audioAssistantSlotTokenId)
+                for (i in 1..cfg.nVq) row.put(i, cfg.audioPadTokenId)
+                localFeeds["repetition_seen_mask"] = OnnxTensor.createTensor(env, seen,
+                    longArrayOf(1, cfg.nVq.toLong(), codebookSize.toLong())).also { tensors.add(it) }
+                localFeeds["assistant_random_u"] = OnnxTensor.createTensor(env, assistant, longArrayOf(1)).also { tensors.add(it) }
+                localFeeds["audio_random_u"] = OnnxTensor.createTensor(env, audio, longArrayOf(1, cfg.nVq.toLong())).also { tensors.add(it) }
+                decodeFeeds["input_ids"] = OnnxTensor.createTensor(env, row, longArrayOf(1, 1, (cfg.nVq + 1).toLong())).also { tensors.add(it) }
+                decodeFeeds["past_valid_lengths"] = OnnxTensor.createTensor(env, length, longArrayOf(1)).also { tensors.add(it) }
+            } catch (failure: Throwable) { close(); throw failure }
         }
+        fun sample(random: OfficialRandom) {
+            assistant.put(0, random.nextFloat())
+            for (i in 0 until cfg.nVq) audio.put(i, random.nextFloat())
+        }
+        fun advance(frame: IntArray, pastLength: Int) {
+            for (i in 0 until cfg.nVq) {
+                val token = frame[i]
+                row.put(i + 1, token)
+                if (token in 0 until codebookSize) seen.put(i * codebookSize + token, 1)
+            }
+            length.put(0, pastLength)
+        }
+        override fun close() { tensors.asReversed().forEach { it.close() }; tensors.clear() }
     }
 
     private fun writeWavMono(audioData: FloatArray, sampleRate: Int, outputFile: File) {
@@ -431,27 +415,6 @@ class MossOnnxDemoEngine(
         val pastResult: OrtSession.Result,
     )
     private data class LocalFrameResult(val shouldContinue: Boolean, val frame: IntArray)
-}
-
-data class SynthesisResult(
-    val outputFile: File,
-    val generatedFrames: Int,
-    val sampleRate: Int,
-    val durationMs: Long,
-    val elapsedMs: Long,
-    val audioCodes: List<IntArray> = emptyList(),
-    val rawLeading: Int = 0,
-    val rawTrailing: Int = 0,
-    val retainedTail: Int = 0,
-    val prefillMs: Long = 0,
-    val generationMs: Long = 0,
-    val codecMs: Long = 0,
-    val vadMs: Long = 0,
-    val codecWarmFrames: Int = 0,
-    val retryMs: Long = 0,
-    val randomDraws: Long = 0,
-) {
-    fun includeRetries(ms: Long): SynthesisResult = copy(elapsedMs = elapsedMs + ms, retryMs = ms)
 }
 
 private data class ModelManifest(

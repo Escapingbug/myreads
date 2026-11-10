@@ -7,7 +7,7 @@ import java.util.regex.*;
 
 final class SpeechText {
     // Guidance must not replay audio generated before the current quality policy.
-    static final String AUDIO_REVISION = "utterance-official-v5";
+    static final String AUDIO_REVISION = "utterance-bertvits-mnn-22k-v1";
     static final int TARGET_CHARACTERS = 48, MAX_CHARACTERS = 72;
     private static final String DIGITS = "零一二三四五六七八九";
     static String normalize(String input) {

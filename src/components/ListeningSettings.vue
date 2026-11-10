@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { Download, Pause, Headphones, Trash2, CheckCircle2, LoaderCircle } from "lucide-vue-next";
-import { tts, voices, formatModelSize, ttsAction, downloadModel, pauseModelDownload, removeModel, saveTtsOptions } from "../services/tts";
+import { tts, voices, formatModelSize, generationMessage, ttsAction, downloadModel, pauseModelDownload, removeModel, saveTtsOptions } from "../services/tts";
 const deleting = ref(false);
 const downloading = computed(() => ["downloading", "verifying"].includes(tts.model.phase));
 const percent = computed(() => Math.min(100, Math.floor(tts.model.downloaded / tts.model.total * 100)));
@@ -11,7 +11,7 @@ const labels = { missing: "尚未下载", downloading: "正在下载", verifying
   <section class="listen-model-card" aria-label="听书模型管理">
     <div class="listen-model-heading">
       <span class="source-symbol"><Headphones :size="23" /></span>
-      <div><h2>中文离线听书</h2><span class="muted">MOSS-TTS-Nano · {{ formatModelSize(tts.model.total) }}</span></div>
+      <div><h2>中文离线听书</h2><span class="muted">Bert-VITS2 · {{ formatModelSize(tts.model.total) }}</span></div>
     </div>
     <p>点击下载声音模型，之后无需联网就能朗读已下载的小说。首次下载建议使用 Wi-Fi。</p>
     <p class="muted">声音在手机上生成，会比播放普通音频更耗电。暂停听书也会暂停生成；已有缓存的片段可直接播放。</p>
@@ -25,16 +25,10 @@ const labels = { missing: "尚未下载", downloading: "正在下载", verifying
       <progress :value="tts.model.downloaded" :max="tts.model.total" aria-label="模型下载进度"></progress>
       <p class="muted">{{ formatModelSize(tts.model.downloaded) }} / {{ formatModelSize(tts.model.total) }}<span v-if="tts.model.phase === 'verifying'"> · 检查文件完整性</span></p>
     </template>
-    <p v-if="tts.model.downloaded > tts.model.total * 0.9 && tts.model.phase !== 'ready'" class="muted">升级只需补充下载，已有模型会保留。</p>
+    <p v-if="tts.model.downloaded > tts.model.total * 0.9 && tts.model.phase !== 'ready'" class="muted">下载完成后会逐项校验，已有进度可以继续。</p>
     <p v-if="tts.model.error" class="download-error" role="alert">{{ tts.model.error }}</p>
     <p v-if="!tts.supported" class="inline-message">在 Android App 中下载并使用本地听书。</p>
-    <div v-if="tts.model.phase !== 'ready'" class="listen-download-source">
-      <label for="model-download-source">下载来源</label>
-      <select id="model-download-source" v-model="tts.modelSource" :disabled="downloading" @change="ttsAction(saveTtsOptions)">
-        <option value="auto">自动（国内镜像优先）</option><option value="mirror">HF 国内镜像</option><option value="official">官方 Hugging Face</option>
-      </select>
-    </div>
-    <p v-if="tts.model.phase !== 'ready' && tts.modelSource === 'auto'" class="muted">连接失败会自动切换来源，已下载的进度会保留。</p>
+    <p v-if="tts.model.phase !== 'ready'" class="muted">新声音需要重新下载模型，原来的声音模型不能通用。下载中断后可以继续。</p>
     <div class="download-actions">
       <button v-if="downloading" class="button secondary" :disabled="tts.busy" @click="ttsAction(pauseModelDownload)"><Pause :size="17" />暂停下载</button>
       <button v-else-if="tts.model.phase !== 'ready'" class="button" :disabled="!tts.supported || tts.busy || !tts.initialized" @click="ttsAction(downloadModel)">
@@ -64,7 +58,8 @@ const labels = { missing: "尚未下载", downloading: "正在下载", verifying
         <option value="chapter">先准备本章</option>
       </select>
     </div>
-    <p class="muted">默认在首个语组生成后开始播放，后台继续生成后续内容。生成暂时跟不上时会等待下一段；先准备本章需要等待整章生成完成。设置在下次开始听书时生效。</p>
+    <p class="muted">边生成边播放会尽快开播，生成跟不上时会反复等待下一段。先准备本章会等本章剩余声音生成完成后再播放，章内无需等生成，换章仍可能等待。更改后请停止并重新开始听书。</p>
+    <p v-if="generationMessage()" class="inline-message" role="status">{{ generationMessage() }}</p>
   </section>
   <p v-if="tts.error" class="download-error" role="alert">{{ tts.error }}</p>
 </template>

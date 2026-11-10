@@ -1,0 +1,6 @@
+Bert-VITS2-MNN code: Voine, Apache-2.0, commit a45fd76668501aca3b383a3a69a36e84e953f2a4.
+22k voice model: study / non-commercial use only per upstream README_EN.md. Code license does not grant voice training data rights.
+https://github.com/Voine/Bert-VITS2-MNN/tree/a45fd76668501aca3b383a3a69a36e84e953f2a4
+MNN 3.6.2: Alibaba, Apache-2.0.
+cppjieba: Yanyi Wu, MIT, commit 340de007f96d2a476fa1b2b525c2b1e4fea4b4a7.
+English CMU dictionary: Carnegie Mellon University; full notice in downloaded preprocess/en/cmudict.rep.

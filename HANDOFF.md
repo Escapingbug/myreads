@@ -429,3 +429,30 @@ JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home ./gradl
 - 触发既有「Retry Gitee release sync」工作流，run <https://github.com/Escapingbug/myreads/actions/runs/42589498395> 成功。流程下载GitHub原签名文件，复用Gitee已有附件，逐项匿名校验后将id1266134改为prerelease=false；没有重新构建、重复上传或替换公开APK。匿名发行版API确认v0.3.14已正式发布。
 - 实际应用parseUpdate/selectUpdate读取两渠道当前元数据与公开更新清单，确认0.3.14/code19，自动优先Gitee、GitHub作为同一大小/哈希文件的备用来源。主机GitHub匿名元数据API返回403，因此仅GitHub元数据经gh授权读取；Gitee元数据、两渠道清单与附件校验仍匿名执行。结果为 `artifacts/release-0.3.14/live-update-logic.json`，工作流日志为 `gitee-publication-workflow.log`，发布记录补充到 `verification.json`。
 - 国内APK直链：<https://gitee.com/anciety/myreads/releases/download/v0.3.14/zijian-0.3.14.apk>。无需卸载或重新下载模型，应用更新来源“自动”或“Gitee”均可使用。全程未使用模拟器、ADB或安装应用；本次仅完成渠道发布，不增加真机听书验证结论。
+
+## 连续播放等待诊断与生成开销调整（2026-11-09，未发布）
+
+- 用户反馈每生成几句话就停下来等待。当前stream模式首个完整WAV完成后立即入队，后台串行生成后续块；`awaitBuffer`只在已有30–90秒目标音频或用户暂停时等待，并非播完才生成。持续生成慢于按当前倍速播放时，有限预缓冲无法保证无限连续。此前用户明确反馈整章等待过长，因此本轮保留stream默认及显式chapter选择，没有擅自恢复自动整章等待。现有版本可选“听书→播放准备方式→先准备本章”，停止再重新开始，本章剩余声音全部生成后才起播，换章仍可能等待。
+- Kotlin引擎改为每个独立请求创建一次固定形状的直接缓冲张量，逐帧原位更新音频行、KV长度、采样随机数及16×1024重复掩码；替代逐帧重建五个输入张量、清空大掩码并遍历历史token。请求退出和中断关闭张量，独立请求重建零掩码；文本、模型、采样顺序、音色、PCM处理与缓存revision不变。依据ONNX Runtime直接缓冲API <https://onnxruntime.ai/docs/api/java/ai/onnxruntime/OnnxTensor.html>。
+- 原生状态提供最近实际生成耗时/音频时长（缓存命中不作为新样本），听书设置页显示测量值，并按当前播放倍速判断是否跟不上。新会话清空旧测量，不从缺失数据推断手机性能；说明chapter取舍及停止后重启生效。
+- 128项前端测试、生产构建/Capacitor同步、72项主机原生测试通过（另1项完整26块模型对照默认跳过）。实际模型单独核对悦文前三块，与官方编码逐帧一致、修改前后WAV逐样本一致；俊豪首块在推理检查点中断、回滚随机状态后重试，编码仍与官方逐帧一致。主机负载变化显著，未建立可靠加速比例，不能外推Android实时能力。Capacitor同步后构建遇到Cordova插件旧增量资源文件缺失，以及Gradle误判修改后的Java/前端资产为UP-TO-DATE；清理插件生成目录并使用`--rerun-tasks --no-watch-fs`重新验证，不能仅以增量构建成功判断新代码进入APK。
+- 强制重编译的最终APK构建、主机测试和正则兼容性门禁均通过，静态确认复用输入类、原生测量字段和前端耗时反馈进入包。记录与样本在 `artifacts/playback-continuity/`，不提交大模型/音频。版本仍为0.3.14，未发布新APK、提交或推送。本轮没有模拟器/ADB或真机测量，连续听书问题不能标为已完全修复。
+
+## Bert-VITS2-MNN 主机试听（2026-11-10，未接入 App）
+
+- 用户要求重新按 Android App 离线可用性选模型，随后授权测试。选用 Voine/Bert-VITS2-MNN 固定提交 `a45fd76668501aca3b383a3a69a36e84e953f2a4`，下载其实际 22k 中英混合 MNN 权重，逐文件核对 Git LFS SHA-256；没有用更大的桌面模型冒充手机权重。6个合成模块实际共37,877,884 bytes，另中文蒸馏BERT31,762,468 bytes；不能把README的29.7MB视为当前完整模型包大小。
+- 独立环境 `artifacts/bertvits2-mnn-sample/env` 安装MNN3.6.2，Mac ARM64 CPU2线程、普通精度。生成脚本复现Android C++模块输入、时长展开和均匀采样配置，但中文前端使用指定BV2提交13424595的Python参考实现（pypinyin/jieba），不是完整Android Kotlin/JNI端到端运行。纯中文使用蒸馏MNN BERT及上游归一化；中英混合使用项目CMU词典和语言/声调偏移、全零BERT特征。两种路径的听感须分别判断。
+- 同Melo此前小说四段全文、逐完整句生成，保留逗号上下文；合成79.354秒音频耗时8.189秒（RTF0.103，含首次中文前端初始化、不含模型加载），首句约1.154秒，进程峰值RSS738,099,200bytes。这些全是主机测量，不可外推手机连续听书、耗电或发热；未接入App、未发布、未使用模拟器/ADB。
+- 输出小说与中英混读MP3分别79.35秒/8.73秒，仅恒定增益+20dB和128kbps编码，没有拉伸、补静音或去噪。PCM逐样本等于各句拼接、无削波，MP3解码后数值有限且峰值<1；MNN的read()返回借用内存，主机脚本已复制，避免后续图执行覆盖此前音频。`verification.json`记录QA与文件哈希。两文件已通过Malink提交发送，delivery-162/163；工具只返回queued，不能声称确认送达。上游预编译libMNN.so/libMNN_Express.so静态ELF16KB对齐通过，其余JNI尚未构建验证。
+- 示例音色22娘_MIX及22k基础模型存在非商用/学习用途限制；试听不等于可随发布版分发。作者骁龙888短句RTF0.357仅作为候选筛选证据，尚无本项目真机长时间测试，也未主观确认比Melo自然。资料、下载清单、复现脚本、逐句PCM、测量和自动转写检查均放在 `artifacts/bertvits2-mnn-sample/`（忽略，不提交）。
+- Whisper small CPU int8自动转写完成：中英混读两句与原文一致（除繁简/标点），小说四段均有对应转写，但存在“屋檐→无言”“信→线”等识别差异，不能据此认定合成错读或准确率达标，也不能用ASR评价情感。原PyAV接口不兼容，改用ffmpeg解码为16k float32后传数组；不改共享环境依赖。记录为 `output/asr.json`、`mixed-output/asr.json`。
+
+## Bert-VITS2-MNN 替换进行中（2026-11-10，未发布）
+
+- 用户明确要求“直接用它替换原来的实现”，已开始完整替换，不是增加可选模型。`SpeechModelRuntime` 改为唯一 `BertVitsEngine`，新 `BertFrontend` 使用上游 Kotlin 中文G2P、变调、Houbb pinyin及英文CMU前端；JNI参考同一固定提交的MNN C++推理，保留实际22k试听权重。普通逗号不切句，`BertNarration`按句保留段落位置，长句75字上限及实际音素/时长超限缩小重试。标题和正文不再追加MOSS专用停顿。
+- MNN3.6.2/cppjieba/limonp源码使用固定归档SHA-256，CMake FetchContent从源码构建两ABI和主机库，不直接复制上游预编译Android库。JNI在图边界执行Java取消/暂停/优先提示检查，并正确保留异常、清理未完成文件。共享两线程CPU runtime；退出时释放模型、词典和Express缓存。最大512个输入音素、2600帧/31秒，避免异常时长分配。整句恒定增益最多+20dB，峰值限制0.95，无拉伸/去噪/补静音。
+- MOSS ONNX引擎（含此前未发布的输入缓冲优化）、CodecStreamDecoder、SpeechEdges移至`src/test`，作为历史主机回归证据保存；生产依赖移除ONNX Runtime，原模型FST/VAD资产通过aapt忽略规则排除。原音频计划/缓存revision改为`bertvits-mnn-22k-v1`，下载状态与速度测量偏好按模型id隔离；播放启动静音改22.05kHz。UI仅保留`bili22`轻柔女声，旧音色偏好回默认，保持用户语速、阅读位置与准备模式；去除当前不适用的HF镜像选择器。旧模型目录保留，避免迁移中删除已有资源。
+- 新catalog id `bertvits2-mnn-bili22-a45fd766-v1`，19文件总87,624,721 bytes（83.6MiB）。全部19文件已经从catalog中的公开固定URL完整下载并验证SHA-256，位于 `artifacts/bertvits2-integration/model/`；普通文件raw GitHub，LFS实际权重media GitHub，不能把两类URL混用。验证记录`public-download-verification.json`。新增可复用`scripts/fetch-tts-model.py`（已用缓存验证）、`scripts/verify-tts-engine.py`（待对最终APK执行）以及CI主机模型/打包引擎门禁。
+- `npm test -- --maxWorkers=1 --testTimeout=20000`：127项通过；首次默认并行因主机内存/交换压力出现两个5秒超时，串行重跑全部通过。`npm run native:sync`成功。第一次Kotlin编译成功；Android Java发现新引擎未声明checked TooLong，已加`@Throws(IOException, InterruptedException)`修复，后续主机unit任务Java编译通过。C++ loader/JNI `clang++ -fsyntax-only`通过。完整原生主机库、主机单测、Android双ABI APK仍在构建，不能报告已经验证替换完成。
+- 当前长期运行的本机工具会话：主机MNN编译exec session98812，日志`host-build.log`（约69%）；Android APK第二次构建44942，日志`android-build2.log`；主机默认unit37878，日志`native-unit-tests.log`。目录统一 `artifacts/bertvits2-integration/`。MNN源码和cppjieba/limonp归档已解压在其`deps/`，主机CMake输出`host/`，目标新库应在`host/bertvits/libzijian_bertvits.dylib`。原始主机CMake配置早于limonp独立FetchContent；已将固定limonp include复制到cppjieba空子模块目录，供本次已在运行的Make编译；后续重新配置会改用新独立limonp固定源。
+- 后续必须完成：处理编译/测试失败；使用`-PbertModelRoot=.../model -PbertTestOutput=.../real-model -PttsNativePath=.../host/bertvits`运行`BertVitsEngineTest`实际正式Kotlin/JNI模型（中文、混读和中断后重试），不能沿用Python样例作验证；待全部代码稳定后强制`assembleDebug --rerun-tasks --no-watch-fs`避免旧增量误判，执行两个静态脚本、apksigner、zipalign；更新此记录为最终结果。旧APK文件时间11月9日，不可拿它验证新实现。当前未提交/推送/发布，无模拟器/ADB，版本仍0.3.14。许可限制见`docs/tts-bertvits2.md`，测试音色非商用限制仍存在，不能宣称已取得商业发布授权。

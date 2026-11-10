@@ -32,6 +32,8 @@ export interface PlaybackStatus {
   preparedUnits?: number;
   totalUnits?: number;
   bufferedSeconds?: number;
+  generationMs?: number;
+  generatedAudioMs?: number;
 }
 interface TtsPlugin {
   getStatus(): Promise<{ model: ModelStatus; playback: PlaybackStatus }>;
@@ -48,19 +50,14 @@ interface TtsPlugin {
 }
 const native = registerPlugin<TtsPlugin>("ZijianTts");
 export const voices = [
-  { id: "Junhao", name: "俊豪", style: "男声" },
-  { id: "Zhiming", name: "志明", style: "男声" },
-  { id: "Weiguo", name: "卫国", style: "男声" },
-  { id: "Xiaoyu", name: "小雨", style: "女声" },
-  { id: "Yuewen", name: "悦文", style: "女声" },
-  { id: "Lingyu", name: "灵羽", style: "女声" },
+  { id: "bili22", name: "轻柔女声", style: "中文 · 中英混读" },
 ] as const;
 export const tts = reactive({
   supported: Capacitor.getPlatform() === "android",
   initialized: false,
   busy: false,
   error: "",
-  voice: "Junhao",
+  voice: "bili22",
   speed: 1,
   modelSource: "auto" as ModelSource,
   mode: "stream" as PreparationMode,
@@ -168,6 +165,17 @@ export async function resumeAfterAnnouncement(token: PromptResumeToken) {
   await refreshTts(); return result?.resumed === true;
 }
 export function formatModelSize(bytes: number) { return `${(bytes / 1024 / 1024).toFixed(1)} MiB`; }
+
+export function generationMessage(status: PlaybackStatus = tts.playback): string {
+  const elapsed = status.generationMs ?? 0, audio = status.generatedAudioMs ?? 0;
+  if (!["playing", "loading", "buffering", "paused"].includes(status.phase)
+      || !Number.isFinite(elapsed) || !Number.isFinite(audio) || elapsed <= 0 || audio <= 0) return "";
+  const measured = `最近生成 ${(audio / 1000).toFixed(1)} 秒声音，用时 ${(elapsed / 1000).toFixed(1)} 秒。`;
+  const speed = Number.isFinite(status.speed) && (status.speed ?? 0) > 0 ? status.speed! : 1;
+  return measured + (elapsed * speed >= audio
+    ? "按当前倍速，生成暂时跟不上播放；可选择先准备本章，减少章内等待。"
+    : "后台会继续准备后续声音。生成耗时可能随手机负载变化。");
+}
 
 export function listeningMessage(status: PlaybackStatus = tts.playback): string {
   if (status.error) return status.error;

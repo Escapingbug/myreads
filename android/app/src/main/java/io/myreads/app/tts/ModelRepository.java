@@ -23,7 +23,7 @@ final class ModelRepository {
         }
         id = catalog.getString("id");
         root = new File(context.getNoBackupFilesDir(), "tts/" + id);
-        preferences = context.getSharedPreferences("tts-model", Context.MODE_PRIVATE);
+        preferences = context.getSharedPreferences("tts-model-" + id, Context.MODE_PRIVATE);
         JSONArray array = catalog.getJSONArray("files");
         long size = 0;
         for (int i = 0; i < array.length(); i++) {

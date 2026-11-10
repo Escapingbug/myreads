@@ -12,13 +12,13 @@ final class PlaybackWarmup {
 
     static File audio(File directory, float speed) throws IOException {
         if (!directory.isDirectory() && !directory.mkdirs()) throw new IOException("播放缓存目录创建失败");
-        int ms = durationMs(speed), bytes = 48000 * ms / 1000 * 2;
-        File file = new File(directory, "output-start-" + ms + ".wav");
+        int ms = durationMs(speed), bytes = 22050 * ms / 1000 * 2;
+        File file = new File(directory, "output-start-22k-" + ms + ".wav");
         if (file.isFile() && file.length() == bytes + 44) return file;
         ByteBuffer header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN);
         header.put(new byte[]{'R','I','F','F'}).putInt(bytes + 36).put(new byte[]{'W','A','V','E'});
         header.put(new byte[]{'f','m','t',' '}).putInt(16).putShort((short) 1).putShort((short) 1);
-        header.putInt(48000).putInt(96000).putShort((short) 2).putShort((short) 16);
+        header.putInt(22050).putInt(44100).putShort((short) 2).putShort((short) 16);
         header.put(new byte[]{'d','a','t','a'}).putInt(bytes);
         File partial = new File(directory, file.getName() + ".part");
         try {

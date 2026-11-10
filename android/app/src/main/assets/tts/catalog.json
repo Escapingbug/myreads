@@ -1,90 +1,130 @@
 {
-  "id": "moss-nano-onnx-v1",
-  "name": "MOSS-TTS-Nano 中文听书",
+  "id": "bertvits2-mnn-bili22-a45fd766-v1",
+  "name": "Bert-VITS2-MNN 离线听书",
   "revision": {
-    "OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX": "f52645cb467506d8e18e746ddd59482685b74e58",
-    "OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX": "ceff0d0749bfb3fa2d61149794ec6feef0d1e1ae",
-    "snakers4/silero-vad": "1e261b036686cd0017d500ee96acd1c4ba572a9d"
+    "Voine/Bert-VITS2-MNN": "a45fd76668501aca3b383a3a69a36e84e953f2a4"
   },
+  "voices": [
+    {
+      "id": "bili22",
+      "name": "轻柔女声"
+    }
+  ],
+  "license": "Bundled upstream 22k voice weights: study / non-commercial use only; see docs/tts-bertvits2.md.",
   "files": [
     {
-      "path": "MOSS-TTS-Nano-100M-ONNX/browser_poc_manifest.json",
-      "url": "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX/resolve/f52645cb467506d8e18e746ddd59482685b74e58/browser_poc_manifest.json",
-      "size": 503354,
-      "sha256": "097d80e993dc29f0bae427590b4f77084a161cb578b50d82c29f455d5faa9eee"
+      "path": "bert/zh/chinese-roberta-wwm-ext-large-distilled-fp16.mnn",
+      "url": "https://media.githubusercontent.com/media/Voine/Bert-VITS2-MNN/a45fd76668501aca3b383a3a69a36e84e953f2a4/bertvits2-jni/src/main/assets/bert/zh/chinese-roberta-wwm-ext-large-distilled-fp16.mnn",
+      "size": 31762468,
+      "sha256": "756197286c18bdf78c30b1aede62b5fbf1608f7b5ae119fb24bd72374e5b987d"
     },
     {
-      "path": "MOSS-TTS-Nano-100M-ONNX/moss_tts_prefill.onnx",
-      "url": "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX/resolve/f52645cb467506d8e18e746ddd59482685b74e58/moss_tts_prefill.onnx",
-      "size": 283305,
-      "sha256": "d56126dcd0574c2f15d98fc6b35eda68d0386b5bd9c5e38e28548d6f2ea8f3db"
+      "path": "bert/zh/tokenizer.json",
+      "url": "https://raw.githubusercontent.com/Voine/Bert-VITS2-MNN/a45fd76668501aca3b383a3a69a36e84e953f2a4/bertvits2-jni/src/main/assets/bert/zh/tokenizer.json",
+      "size": 268962,
+      "sha256": "173796956820ea27bd14f76bf28162607ff4254807e2948253eb5b46f5bb643b"
     },
     {
-      "path": "MOSS-TTS-Nano-100M-ONNX/moss_tts_decode_step.onnx",
-      "url": "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX/resolve/f52645cb467506d8e18e746ddd59482685b74e58/moss_tts_decode_step.onnx",
-      "size": 291483,
-      "sha256": "698cbc2fc1c2feca16e5895614ed52bbb32ded10f236c076f477b2e69abf32d8"
+      "path": "bv2_model/mix/22k_bili22_mix_finetune_dec.mnn",
+      "url": "https://media.githubusercontent.com/media/Voine/Bert-VITS2-MNN/a45fd76668501aca3b383a3a69a36e84e953f2a4/bertvits2-jni/src/main/assets/bv2_model/mix/22k_bili22_mix_finetune_dec.mnn",
+      "size": 1113212,
+      "sha256": "99ef7d4c253419a6044839f6893d29a08a058ea970ca457a2a6b2d798c8d0cff"
     },
     {
-      "path": "MOSS-TTS-Nano-100M-ONNX/moss_tts_local_fixed_sampled_frame.onnx",
-      "url": "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX/resolve/f52645cb467506d8e18e746ddd59482685b74e58/moss_tts_local_fixed_sampled_frame.onnx",
-      "size": 471262,
-      "sha256": "40cdb00efc171c450cf91468e01429caa41b0252222cd308e978f58fe354afa8"
+      "path": "bv2_model/mix/22k_bili22_mix_finetune_dp.mnn",
+      "url": "https://media.githubusercontent.com/media/Voine/Bert-VITS2-MNN/a45fd76668501aca3b383a3a69a36e84e953f2a4/bertvits2-jni/src/main/assets/bv2_model/mix/22k_bili22_mix_finetune_dp.mnn",
+      "size": 458012,
+      "sha256": "f01f57153926178c77e207096b8f8f19b2d89f9fe6e359067bea01de43f9226f"
     },
     {
-      "path": "MOSS-TTS-Nano-100M-ONNX/moss_tts_global_shared.data",
-      "url": "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX/resolve/f52645cb467506d8e18e746ddd59482685b74e58/moss_tts_global_shared.data",
-      "size": 440813568,
-      "sha256": "bce8312c3df6a44545302cae229b61054fe0672e0b252ba59cba47adeed831dc"
+      "path": "bv2_model/mix/22k_bili22_mix_finetune_emb.mnn",
+      "url": "https://media.githubusercontent.com/media/Voine/Bert-VITS2-MNN/a45fd76668501aca3b383a3a69a36e84e953f2a4/bertvits2-jni/src/main/assets/bv2_model/mix/22k_bili22_mix_finetune_emb.mnn",
+      "size": 2996,
+      "sha256": "6549fe1b7213ad6d3e2a1c9147133f9c240315ea3641015e65edfb307ca4923f"
     },
     {
-      "path": "MOSS-TTS-Nano-100M-ONNX/moss_tts_local_shared.data",
-      "url": "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX/resolve/f52645cb467506d8e18e746ddd59482685b74e58/moss_tts_local_shared.data",
-      "size": 229678080,
-      "sha256": "bae7782032c0fb12490ab42afe009f87ae6c75a0f0596fc7b5c08e4d5ee93916"
+      "path": "bv2_model/mix/22k_bili22_mix_finetune_enc.mnn",
+      "url": "https://media.githubusercontent.com/media/Voine/Bert-VITS2-MNN/a45fd76668501aca3b383a3a69a36e84e953f2a4/bertvits2-jni/src/main/assets/bv2_model/mix/22k_bili22_mix_finetune_enc.mnn",
+      "size": 7520712,
+      "sha256": "d5bf93ec5554cde62af7c7cf10741e65bd3a500aac18361ad04d7b8efc4eda62"
     },
     {
-      "path": "MOSS-TTS-Nano-100M-ONNX/tts_browser_onnx_meta.json",
-      "url": "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX/resolve/f52645cb467506d8e18e746ddd59482685b74e58/tts_browser_onnx_meta.json",
-      "size": 4487,
-      "sha256": "3edf25232dcd0af3d061c837e9a968a39e2f8592e06777d740503c4f2244f95c"
+      "path": "bv2_model/mix/22k_bili22_mix_finetune_flow.mnn",
+      "url": "https://media.githubusercontent.com/media/Voine/Bert-VITS2-MNN/a45fd76668501aca3b383a3a69a36e84e953f2a4/bertvits2-jni/src/main/assets/bv2_model/mix/22k_bili22_mix_finetune_flow.mnn",
+      "size": 27744680,
+      "sha256": "caa7c6c28cd0fffc16173e39d2444ba9730a4916d65dd7db3e1179829429e523"
     },
     {
-      "path": "MOSS-TTS-Nano-100M-ONNX/tokenizer.model",
-      "url": "https://huggingface.co/OpenMOSS-Team/MOSS-TTS-Nano-100M-ONNX/resolve/f52645cb467506d8e18e746ddd59482685b74e58/tokenizer.model",
-      "size": 470897,
-      "sha256": "c353ee1479b536bf414c1b247f5542b6607fb8ae91320e5af1781fee200fddff"
+      "path": "bv2_model/mix/22k_bili22_mix_finetune_sdp.mnn",
+      "url": "https://media.githubusercontent.com/media/Voine/Bert-VITS2-MNN/a45fd76668501aca3b383a3a69a36e84e953f2a4/bertvits2-jni/src/main/assets/bv2_model/mix/22k_bili22_mix_finetune_sdp.mnn",
+      "size": 1038272,
+      "sha256": "d78d729efcda70aca916ea441e17dca507e3477f0ed590eea8128e48701e4068"
     },
     {
-      "path": "MOSS-Audio-Tokenizer-Nano-ONNX/codec_browser_onnx_meta.json",
-      "url": "https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/ceff0d0749bfb3fa2d61149794ec6feef0d1e1ae/codec_browser_onnx_meta.json",
-      "size": 17036,
-      "sha256": "3e291c883bb7d11ff2fe8e964e3e495519760358859f35c951254c7741592731"
+      "path": "preprocess/en/cmudict.rep",
+      "url": "https://raw.githubusercontent.com/Voine/Bert-VITS2-MNN/a45fd76668501aca3b383a3a69a36e84e953f2a4/text-preprocess/src/main/assets/preprocess/en/cmudict.rep",
+      "size": 3969309,
+      "sha256": "d127b5ce8b8e695732701e8efde04b9b0fa11991218b1fb9d21bd0c9264636aa"
     },
     {
-      "path": "MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_full.onnx",
-      "url": "https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/ceff0d0749bfb3fa2d61149794ec6feef0d1e1ae/moss_audio_tokenizer_decode_full.onnx",
-      "size": 681902,
-      "sha256": "0fbbafe3fd4afa2a019af5c5ced204af6e2d1db044fa40f021525d2aee95b4ac"
+      "path": "preprocess/zh/dict/hmm_model.utf8",
+      "url": "https://raw.githubusercontent.com/Voine/Bert-VITS2-MNN/a45fd76668501aca3b383a3a69a36e84e953f2a4/text-preprocess/src/main/assets/preprocess/zh/dict/hmm_model.utf8",
+      "size": 519739,
+      "sha256": "f17790586ac86dd048c8adffed052c4bd2b28ed0682972c1275e59040c0589a7"
     },
     {
-      "path": "MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_shared.data",
-      "url": "https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/ceff0d0749bfb3fa2d61149794ec6feef0d1e1ae/moss_audio_tokenizer_decode_shared.data",
-      "size": 44198912,
-      "sha256": "e69d52e0f4e84ca27850557ee54face46632d3a5a16c89bd246c7c408466dcad"
+      "path": "preprocess/zh/dict/idf.utf8",
+      "url": "https://raw.githubusercontent.com/Voine/Bert-VITS2-MNN/a45fd76668501aca3b383a3a69a36e84e953f2a4/text-preprocess/src/main/assets/preprocess/zh/dict/idf.utf8",
+      "size": 5998717,
+      "sha256": "dbd1e03d72b2263cc8d84a4304ed77677eed9e7deaf43a1a5133bbba9733b535"
     },
     {
-      "path": "MOSS-Audio-Tokenizer-Nano-ONNX/moss_audio_tokenizer_decode_step.onnx",
-      "url": "https://huggingface.co/OpenMOSS-Team/MOSS-Audio-Tokenizer-Nano-ONNX/resolve/ceff0d0749bfb3fa2d61149794ec6feef0d1e1ae/moss_audio_tokenizer_decode_step.onnx",
-      "size": 351400,
-      "sha256": "9527c86a29e1837edec1f74db57d5eeaadb3a715af3382703566460afed25855"
+      "path": "preprocess/zh/dict/jieba.dict.utf8",
+      "url": "https://raw.githubusercontent.com/Voine/Bert-VITS2-MNN/a45fd76668501aca3b383a3a69a36e84e953f2a4/text-preprocess/src/main/assets/preprocess/zh/dict/jieba.dict.utf8",
+      "size": 5071204,
+      "sha256": "3043b77068e09c9904f27cad82f12b6ebe9dbdb5aeff3b25e45ab7f9c1122b55"
     },
     {
-      "path": "Silero-VAD/silero_vad_16k_op15.onnx",
-      "url": "https://raw.githubusercontent.com/snakers4/silero-vad/1e261b036686cd0017d500ee96acd1c4ba572a9d/src/silero_vad/data/silero_vad_16k_op15.onnx",
-      "size": 1289603,
-      "sha256": "7ed98ddbad84ccac4cd0aeb3099049280713df825c610a8ed34543318f1b2c49",
-      "asset": "tts/silero_vad_16k_op15.onnx"
+      "path": "preprocess/zh/dict/pos_dict/char_state_tab.utf8",
+      "url": "https://raw.githubusercontent.com/Voine/Bert-VITS2-MNN/a45fd76668501aca3b383a3a69a36e84e953f2a4/text-preprocess/src/main/assets/preprocess/zh/dict/pos_dict/char_state_tab.utf8",
+      "size": 327139,
+      "sha256": "28b7be1dd7369766a51445af4d42e9a2ba4bf374c13be5bc1ca7721e27271dbb"
+    },
+    {
+      "path": "preprocess/zh/dict/pos_dict/prob_emit.utf8",
+      "url": "https://raw.githubusercontent.com/Voine/Bert-VITS2-MNN/a45fd76668501aca3b383a3a69a36e84e953f2a4/text-preprocess/src/main/assets/preprocess/zh/dict/pos_dict/prob_emit.utf8",
+      "size": 1687686,
+      "sha256": "c33c4cb7edf3b3a5947df7209b6e9f267eae1f21335d9e2bd2521ea07105457a"
+    },
+    {
+      "path": "preprocess/zh/dict/pos_dict/prob_start.utf8",
+      "url": "https://raw.githubusercontent.com/Voine/Bert-VITS2-MNN/a45fd76668501aca3b383a3a69a36e84e953f2a4/text-preprocess/src/main/assets/preprocess/zh/dict/pos_dict/prob_start.utf8",
+      "size": 4347,
+      "sha256": "13623ea0e9300bdb597cb2da28770b7b385d6c0098d66e516083fb01b6bd5d96"
+    },
+    {
+      "path": "preprocess/zh/dict/pos_dict/prob_trans.utf8",
+      "url": "https://raw.githubusercontent.com/Voine/Bert-VITS2-MNN/a45fd76668501aca3b383a3a69a36e84e953f2a4/text-preprocess/src/main/assets/preprocess/zh/dict/pos_dict/prob_trans.utf8",
+      "size": 124159,
+      "sha256": "f22363e2307408293d180c6f9f6b5cb75879d52f722f7764fa2d3d0ae2400236"
+    },
+    {
+      "path": "preprocess/zh/dict/stop_words.utf8",
+      "url": "https://raw.githubusercontent.com/Voine/Bert-VITS2-MNN/a45fd76668501aca3b383a3a69a36e84e953f2a4/text-preprocess/src/main/assets/preprocess/zh/dict/stop_words.utf8",
+      "size": 8974,
+      "sha256": "b788b8a939d2e2fe079abd579ea98f12f9fb84370bfd0dddd81bb9381f7ab42c"
+    },
+    {
+      "path": "preprocess/zh/dict/user.dict.utf8",
+      "url": "https://raw.githubusercontent.com/Voine/Bert-VITS2-MNN/a45fd76668501aca3b383a3a69a36e84e953f2a4/text-preprocess/src/main/assets/preprocess/zh/dict/user.dict.utf8",
+      "size": 49,
+      "sha256": "495bbf49270408a1234690e1e6a97328f30a482a7a72aa769e8a12e8714b0c62"
+    },
+    {
+      "path": "preprocess/zh/opencpop-strict.txt",
+      "url": "https://raw.githubusercontent.com/Voine/Bert-VITS2-MNN/a45fd76668501aca3b383a3a69a36e84e953f2a4/text-preprocess/src/main/assets/preprocess/zh/opencpop-strict.txt",
+      "size": 4084,
+      "sha256": "d66bbb1380a8ebf17d7ace5bf4b459f3728a469eea2aaeae2aeb3969b88223ff"
     }
   ]
 }

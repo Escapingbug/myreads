@@ -1,19 +1,22 @@
 // @vitest-environment node
 import { describe, it, expect } from "vitest";
-import { readFile } from "node:fs/promises";
-import { createHash } from "node:crypto";
 import catalog from "../android/app/src/main/assets/tts/catalog.json";
 
-describe("bundled model dependencies", () => {
-  it("provides the GitHub-hosted VAD locally with exactly the pinned catalog bytes", async () => {
-    const vad = catalog.files.find((item) => item.path.startsWith("Silero-VAD/"))!;
-    expect(vad.asset).toBe("tts/silero_vad_16k_op15.onnx");
-    const bytes = await readFile(new URL(`../android/app/src/main/assets/${vad.asset}`, import.meta.url));
-    expect(bytes.length).toBe(vad.size);
-    expect(createHash("sha256").update(bytes).digest("hex")).toBe(vad.sha256);
-  });
-  it("leaves no required model file dependent on a GitHub-only network download", () => {
-    expect(catalog.files).toHaveLength(13);
-    for (const entry of catalog.files) expect(Boolean(entry.asset) || entry.url.startsWith("https://huggingface.co/")).toBe(true);
+describe("Bert-VITS2 model migration", () => {
+  it("pins the auditioned bilingual weights, BERT and complete text frontend", () => {
+    expect(catalog.id).toBe("bertvits2-mnn-bili22-a45fd766-v1");
+    const revision = catalog.revision["Voine/Bert-VITS2-MNN"];
+    expect(catalog.files).toHaveLength(19);
+    expect(new Set(catalog.files.map(file => file.path)).size).toBe(19);
+    for (const file of catalog.files) {
+      expect(file.url).toContain(`/${revision}/`);
+      expect(file.path).not.toMatch(/^(MOSS|Silero)/);
+      expect(file.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(file.size).toBeGreaterThan(0);
+    }
+    expect(catalog.files.reduce((total, file) => total + file.size, 0)).toBeLessThan(90_000_000);
+    expect(catalog.files.filter(file => file.path.startsWith("bv2_model/") && file.path.endsWith(".mnn"))).toHaveLength(6);
+    expect(catalog.files.some(file => file.path === "bert/zh/tokenizer.json")).toBe(true);
+    expect(catalog.files.some(file => file.path === "preprocess/en/cmudict.rep")).toBe(true);
   });
 });

@@ -78,9 +78,9 @@ public final class ZijianAccessibilityPlugin extends Plugin {
         getActivity().runOnUiThread(() -> finishSpeech(true, null));
     }
     @PluginMethod public void speak(PluginCall call) {
-        String text = call.getString("text", "").trim(), voice = call.getString("voice", "Junhao");
+        String text = call.getString("text", "").trim(), voice = call.getString("voice", "bili22");
         if (!enabled || !SpeechModelRuntime.loaded()) { call.reject("请先加载模型并开启无障碍模式"); return; }
-        if (text.isEmpty() || text.length() > 4096 || !Arrays.asList("Junhao", "Zhiming", "Weiguo", "Xiaoyu", "Yuewen", "Lingyu").contains(voice)) {
+        if (text.isEmpty() || text.length() > 4096 || !Arrays.asList("bili22").contains(voice)) {
             call.reject("语音提示参数无效"); return;
         }
         int token = generation.incrementAndGet();

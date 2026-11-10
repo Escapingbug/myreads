@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@capacitor/core", () => ({ Capacitor: { getPlatform: () => "android" }, registerPlugin: () => mocks.native }));
 vi.mock("@capacitor/preferences", () => ({ Preferences: mocks.preferences }));
 vi.mock("../src/services/library", () => ({ state: { books: mocks.books }, saveProgress: mocks.saveProgress }));
-const model = { id: "moss-nano-onnx-v1", phase: "ready", total: 100, downloaded: 100, file: "", error: "" };
+const model = { id: "bertvits2-mnn-bili22-a45fd766-v1", phase: "ready", total: 100, downloaded: 100, file: "", error: "" };
 const book: Book = {
   localId: "test-book", id: "book", sourceId: "demo", sourceName: "demo", sourceVersion: "1", addedAt: 1,
   title: "山间来信", author: "演示", state: "ready", failed: [],
@@ -29,6 +29,25 @@ beforeEach(() => {
   });
 });
 describe("local listening", () => {
+  it("explains measured generation shortfalls at the actual playback speed", async () => {
+    const { generationMessage } = await import("../src/services/tts");
+    expect(generationMessage({ phase: "buffering", generationMs: 18000, generatedAudioMs: 10000, speed: 1 }))
+      .toContain("生成暂时跟不上播放");
+    expect(generationMessage({ phase: "playing", generationMs: 8000, generatedAudioMs: 10000, speed: 1.5 }))
+      .toContain("生成暂时跟不上播放");
+    expect(generationMessage({ phase: "playing", generationMs: 8000, generatedAudioMs: 10000, speed: 1 }))
+      .not.toContain("生成暂时跟不上播放");
+    expect(generationMessage({ phase: "paused", generationMs: 18000, generatedAudioMs: 10000, speed: .5 }))
+      .not.toContain("生成暂时跟不上播放");
+  });
+  it("does not infer device speed from absent, invalid or stopped measurements", async () => {
+    const { generationMessage } = await import("../src/services/tts");
+    for (const status of [
+      { phase: "buffering" }, { phase: "playing", generationMs: 0, generatedAudioMs: 10000 },
+      { phase: "playing", generationMs: Infinity, generatedAudioMs: 10000 },
+      { phase: "idle", generationMs: 18000, generatedAudioMs: 10000 },
+    ] as const) expect(generationMessage(status)).toBe("");
+  });
   it("initialization queries status without downloading a model", async () => {
     const tts = await import("../src/services/tts");
     await Promise.all([tts.initializeTts(), tts.initializeTts()]);
@@ -74,7 +93,7 @@ describe("local listening", () => {
     const service = await import("../src/services/tts"); await service.initializeTts();
     expect(service.tts.mode).toBe("stream");
     await service.startListening(book, 0, 0);
-    expect(mocks.native.play).toHaveBeenCalledWith(expect.objectContaining({ mode: "stream", voice: "Xiaoyu", speed: 2 }));
+    expect(mocks.native.play).toHaveBeenCalledWith(expect.objectContaining({ mode: "stream", voice: "bili22", speed: 2 }));
   });
   it("ignores the retired continuity setting when restoring old preferences", async () => {
     mocks.preferences.get.mockResolvedValue({ value: JSON.stringify({ continuity: false }) });
