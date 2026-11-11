@@ -23,6 +23,7 @@ class Audio8AppEngine internal constructor(private val backend: Backend) : Close
                                  val prefillMs: Long = 0, val generationMs: Long = 0, val codecMs: Long = 0)
     class TooLong : IOException("这段声音未能完整生成")
 
+    @Throws(TooLong::class, InterruptedException::class)
     fun synthesize(text: String, output: File, checkpoint: SynthesisCheckpoint): SynthesisResult {
         val start = System.nanoTime()
         var waiting = 0L
