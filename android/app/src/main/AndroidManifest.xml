@@ -4,6 +4,7 @@
 
     <application
         android:allowBackup="true"
+        android:largeHeap="true"
         android:icon="@drawable/zijian_icon"
         android:label="@string/app_name"
         android:roundIcon="@drawable/zijian_icon"
