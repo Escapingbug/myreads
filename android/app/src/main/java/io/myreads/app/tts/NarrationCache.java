@@ -7,7 +7,7 @@ import java.util.*;
 
 /** Cache WAV with its structural timing and generated-code provenance. */
 final class NarrationCache {
-    static final String REVISION = "bertvits-mnn-22k-v1";
+    static final String REVISION = "audio8-litert-44k-v1";
     static final class Clip {
         final File file;
         final NarrationPlanner.Unit unit;

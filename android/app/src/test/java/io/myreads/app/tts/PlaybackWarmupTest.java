@@ -19,8 +19,8 @@ public class PlaybackWarmupTest {
         File file = PlaybackWarmup.audio(folder.getRoot(), 1.5f);
         byte[] bytes = Files.readAllBytes(file.toPath());
         ByteBuffer wav = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
-        assertEquals(1, wav.getShort(22)); assertEquals(22050, wav.getInt(24));
-        assertEquals(16, wav.getShort(34)); assertEquals(22050 * 750 / 1000 * 2, wav.getInt(40));
+        assertEquals(1, wav.getShort(22)); assertEquals(44100, wav.getInt(24));
+        assertEquals(16, wav.getShort(34)); assertEquals(44100 * 750 / 1000 * 2, wav.getInt(40));
         for (int i = 44; i < bytes.length; i++) assertEquals(0, bytes[i]);
         long modified = file.lastModified();
         assertEquals(file, PlaybackWarmup.audio(folder.getRoot(), 1.5f));

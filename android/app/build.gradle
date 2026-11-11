@@ -15,17 +15,6 @@ android {
         versionCode = (project.findProperty('appVersionCode') ?: appVersion.androidVersionCode).toInteger()
         versionName = (project.findProperty('appVersionName') ?: appVersion.version).toString()
         ndk { abiFilters 'arm64-v8a', 'x86_64' }
-        externalNativeBuild {
-            cmake {
-                arguments '-DANDROID_STL=c++_shared'
-                if (project.hasProperty('ttsDepsRoot')) {
-                    arguments "-DFETCHCONTENT_SOURCE_DIR_BERT_MNN=${project.property('ttsDepsRoot')}/MNN-3.6.2",
-                        "-DFETCHCONTENT_SOURCE_DIR_BERT_JIEBA=${project.property('ttsDepsRoot')}/cppjieba-340de007f96d2a476fa1b2b525c2b1e4fea4b4a7",
-                        "-DFETCHCONTENT_SOURCE_DIR_BERT_LIMONP=${project.property('ttsDepsRoot')}/limonp-5c82a3f17e4e0adc6a5decfe245054b0ed533d1a"
-                }
-                targets 'zijian_bertvits'
-            }
-        }
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -33,6 +22,9 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~:!normalizer:!silero_vad_16k_op15.onnx'
         }
     }
+    buildFeatures { buildConfig = true }
+    defaultConfig { buildConfigField "String", "LITERT_VERSION", '"2.2.0"' }
+    packaging { jniLibs { useLegacyPackaging = true } }
     signingConfigs {
         if (signingPath) {
             publication {
@@ -49,9 +41,6 @@ android {
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }
-    }
-    externalNativeBuild {
-        cmake { path 'src/main/cpp/CMakeLists.txt'; version '3.22.1' }
     }
     testOptions {
         unitTests.all {
@@ -86,7 +75,8 @@ dependencies {
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"
     implementation project(':capacitor-cordova-android-plugins')
-    implementation 'com.github.houbb:pinyin:0.4.0'
+    testImplementation 'com.github.houbb:pinyin:0.4.0'
+    implementation 'com.google.ai.edge.litert:litert:2.2.0'
     implementation 'androidx.media3:media3-exoplayer:1.8.0'
     implementation 'androidx.media3:media3-session:1.8.0'
 }

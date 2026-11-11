@@ -1,0 +1,14 @@
+{
+  "reference_text": "你好，这是在移动设备上直接运行的语音合成模型测试。",
+  "source": "/Users/maclaw/Documents/myreads/artifacts/qwen3-tts-sample/Qwen3-TTS-0.6B-发布方手机短样例.wav",
+  "source_kind": "synthetic Qwen3-TTS 0.6B bundled demo_speaker publisher sample, not a human recording",
+  "sha256": "9fc50fff62e25c8734de8bb0d25960a1bfee4458a17d77ca26d2a95cf56d9077",
+  "audio_s": 4.56,
+  "shape": [
+    10,
+    99
+  ],
+  "registration_s": 7.349011833779514,
+  "max_rss_bytes": 2059517952,
+  "platform": "Mac ARM64 CPU, not Android"
+}

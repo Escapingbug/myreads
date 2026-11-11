@@ -50,14 +50,14 @@ interface TtsPlugin {
 }
 const native = registerPlugin<TtsPlugin>("ZijianTts");
 export const voices = [
-  { id: "bili22", name: "轻柔女声", style: "中文 · 中英混读" },
+  { id: "audio8-zh", name: "自然中文", style: "中文 · 中英混读" },
 ] as const;
 export const tts = reactive({
   supported: Capacitor.getPlatform() === "android",
   initialized: false,
   busy: false,
   error: "",
-  voice: "bili22",
+  voice: "audio8-zh",
   speed: 1,
   modelSource: "auto" as ModelSource,
   mode: "stream" as PreparationMode,

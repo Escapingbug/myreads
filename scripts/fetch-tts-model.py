@@ -15,18 +15,28 @@ root = args.destination.resolve()
 root.mkdir(parents=True, exist_ok=True)
 
 
+def file_hash(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        while data := stream.read(1024 * 1024):
+            digest.update(data)
+    return digest.hexdigest()
+
+
 def fetch(entry):
     target = (root / entry["path"]).resolve()
     if not target.is_relative_to(root):
         raise ValueError("Model path escapes destination")
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.is_file() and target.stat().st_size == entry["size"]:
-        if hashlib.sha256(target.read_bytes()).hexdigest() == entry["sha256"]:
+        if file_hash(target) == entry["sha256"]:
             return
     partial = target.with_suffix(target.suffix + ".part")
     digest = hashlib.sha256()
     try:
-        with urllib.request.urlopen(entry["url"], timeout=120) as response, partial.open("wb") as output:
+        source = ((Path(__file__).resolve().parent.parent / "android/app/src/main/assets" / entry["asset"]).open("rb")
+                  if "asset" in entry else urllib.request.urlopen(entry["url"], timeout=120))
+        with source as response, partial.open("wb") as output:
             while data := response.read(1024 * 1024):
                 digest.update(data)
                 output.write(data)

@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@capacitor/core", () => ({ Capacitor: { getPlatform: () => "android" }, registerPlugin: () => mocks.native }));
 vi.mock("@capacitor/preferences", () => ({ Preferences: mocks.preferences }));
 vi.mock("../src/services/library", () => ({ state: { books: mocks.books }, saveProgress: mocks.saveProgress }));
-const model = { id: "bertvits2-mnn-bili22-a45fd766-v1", phase: "ready", total: 100, downloaded: 100, file: "", error: "" };
+const model = { id: "audio8-realistic-air-int8-dcf47703-v1", phase: "ready", total: 100, downloaded: 100, file: "", error: "" };
 const book: Book = {
   localId: "test-book", id: "book", sourceId: "demo", sourceName: "demo", sourceVersion: "1", addedAt: 1,
   title: "山间来信", author: "演示", state: "ready", failed: [],
@@ -93,7 +93,7 @@ describe("local listening", () => {
     const service = await import("../src/services/tts"); await service.initializeTts();
     expect(service.tts.mode).toBe("stream");
     await service.startListening(book, 0, 0);
-    expect(mocks.native.play).toHaveBeenCalledWith(expect.objectContaining({ mode: "stream", voice: "bili22", speed: 2 }));
+    expect(mocks.native.play).toHaveBeenCalledWith(expect.objectContaining({ mode: "stream", voice: "audio8-zh", speed: 2 }));
   });
   it("ignores the retired continuity setting when restoring old preferences", async () => {
     mocks.preferences.get.mockResolvedValue({ value: JSON.stringify({ continuity: false }) });

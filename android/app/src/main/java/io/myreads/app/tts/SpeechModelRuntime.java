@@ -7,14 +7,14 @@ import java.io.IOException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantLock;
 
-/** One offline MNN model for narration and UI speech; all access is serialized. */
+/** One offline Audio8 model for narration and UI speech; all access is serialized. */
 final class SpeechModelRuntime {
     static final class RunawaySpeech extends IOException {
         RunawaySpeech() { super("这段声音未能完整生成，请重试或换一个声音"); }
     }
     private static final ReentrantLock lock = new ReentrantLock(true);
     private static final AtomicInteger guidance = new AtomicInteger();
-    private static volatile BertVitsEngine engine;
+    private static volatile Audio8AppEngine engine;
     private static volatile boolean accessibility;
     private static int narrators;
     static final class YieldNarration extends RuntimeException {}
@@ -52,17 +52,17 @@ final class SpeechModelRuntime {
             PowerManager.WakeLock wake = context.getSystemService(PowerManager.class)
                 .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "zijian:accessibility-model");
             wake.acquire(10 * 60 * 1000L);
-            try { engine = new BertVitsEngine(repository.root); }
+            try { engine = new Audio8AppEngine(context, repository.root); }
             finally { if (wake.isHeld()) wake.release(); }
         }
     }
     static int[] tokenize(Context context, String text) throws Exception {
-        // Planning is cheap and never needs a model lock or native BERT run.
+        // Planning is cheap and never needs a model lock or native graph run.
         return text.codePoints().toArray();
     }
     static java.util.List<OfficialNarration.Chunk> planChapter(Context context,
             java.util.List<OfficialNarration.Paragraph> paragraphs, String voice) throws Exception {
-        return BertNarration.chapter(paragraphs);
+        return Audio8Narration.chapter(paragraphs);
     }
     // UI guidance is its own synthesis request, using the same serialized engine.
     static SynthesisResult synthesize(Context context, String text, File output, String voice,
@@ -75,15 +75,15 @@ final class SpeechModelRuntime {
         boolean committed = false;
         try {
             checkpoint.awaitReady(); load(context, true); checkpoint.awaitReady();
-            if (!BertVitsEngine.VOICE.equals(voice)) throw new IOException("请选择新版听书声音");
+            if (!Audio8AppEngine.VOICE.equals(voice)) throw new IOException("请选择新版听书声音");
             try {
                 SynthesisResult result = engine.synthesize(text, output, checkpoint);
                 committed = true;
                 return result;
-            } catch (BertVitsEngine.TooLong tooLong) {
+            } catch (Audio8AppEngine.TooLong tooLong) {
                 // Keep the existing service's bounded retry at smaller sentence
                 // budgets. Capped requests never write or cache partial speech.
-                return new SynthesisResult(output, 375, BertVitsEngine.SAMPLE_RATE, 0, 0);
+                return new SynthesisResult(output, 375, Audio8AppEngine.SAMPLE_RATE, 0, 0);
             }
         } finally {
             // Interrupted, yielded and capped attempts cannot leave playable audio.

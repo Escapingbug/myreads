@@ -38,7 +38,7 @@ public final class BookPlaybackService extends MediaSessionService {
     private volatile boolean producing;
     private volatile boolean wantsPlayback = true;
     private volatile SynthesisGate synthesisGate = new SynthesisGate();
-    private String bookId = "", bookTitle = "", chapterTitle = "", voice = "bili22", error = "", phase = "idle", text = "";
+    private String bookId = "", bookTitle = "", chapterTitle = "", voice = "audio8-zh", error = "", phase = "idle", text = "";
     private int chapter, paragraph;
     private volatile float speed = 1;
     private String playingPlan = "", playingRandom = "";
@@ -291,7 +291,7 @@ public final class BookPlaybackService extends MediaSessionService {
                     }
                     catch (FrameLimitException limit) {
                         int budget = Math.max(1, counter.count(planned.unit.text) / 2);
-                        List<String> smaller = OfficialNarration.split(planned.unit.text, counter::count, budget);
+                        List<String> smaller = Audio8Text.split(planned.unit.text, counter::count, budget);
                         if (smaller.size() < 2) throw new IOException("这一句未能完整生成，请换一个声音后重试");
                         List<OfficialNarration.Chunk> replacement = new ArrayList<>();
                         for (int i = 0; i < smaller.size(); i++) {
@@ -308,7 +308,7 @@ public final class BookPlaybackService extends MediaSessionService {
                                 units.addLast(new Planned(planned.plan.chunks.get(i), false, planned.plan, i));
                         } else for (int i = replacement.size() - 1; i >= 0; i--) units.addFirst(new Planned(replacement.get(i), true));
                         count += smaller.size() - 1;
-                        android.util.Log.i("ZijianTts", "Retrying oversized BertVITS chunk at a smaller token budget");
+                        android.util.Log.i("ZijianTts", "Retrying oversized Audio8 chunk at a smaller token budget");
                         continue;
                     }
                     check(token);
@@ -403,7 +403,7 @@ public final class BookPlaybackService extends MediaSessionService {
         if (cached != null) {
             random.advance(cached.randomDraws);
             destination.setLastModified(System.currentTimeMillis());
-            android.util.Log.i("ZijianTts", "Reusing BertVITS narration cache");
+            android.util.Log.i("ZijianTts", "Reusing Audio8 narration cache");
             return cached;
         }
         if (directory.getUsableSpace() < 64L * 1024 * 1024) throw new IOException("存储空间不足，请先释放至少 64 MiB 空间");
@@ -415,7 +415,7 @@ public final class BookPlaybackService extends MediaSessionService {
             SynthesisResult result = SpeechModelRuntime.synthesizeOfficial(this, unit.text, partial, selectedVoice, () -> {
                 check(token);
                 // Release the shared model at a checkpoint; retry the uncommitted phrase
-                // after guidance. Never block a paused narrator while holding MNN.
+                // after guidance. Never block a paused narrator while holding the model.
                 SpeechModelRuntime.checkNarration(gate);
                 gate.awaitModelReady(() -> { if (synthesisWake.isHeld()) synthesisWake.release(); },
                     () -> synthesisWake.acquire(10 * 60 * 1000L), SpeechModelRuntime::guidancePending);
@@ -429,7 +429,7 @@ public final class BookPlaybackService extends MediaSessionService {
             NarrationCache.write(partialCodes, clip);
             if (!partialCodes.renameTo(sidecar)) throw new IOException("语音缓存保存失败");
             android.util.Log.i("ZijianTts", "Generated " + clip.durationMs + "ms audio in " + clip.activeMs + "ms, voice="
-                + selectedVoice + ", engine=bertvits-mnn, rngDraws=" + result.getRandomDraws()
+                + selectedVoice + ", engine=audio8-litert, rngDraws=" + result.getRandomDraws()
                 + ", stagesMs=" + result.getPrefillMs() + "/" + result.getGenerationMs() + "/" + result.getCodecMs());
         } finally {
             partial.delete(); partialCodes.delete();

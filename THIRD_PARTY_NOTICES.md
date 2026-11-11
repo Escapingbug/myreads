@@ -1,12 +1,20 @@
 # 第三方组件
 
+## Audio8 与 LiteRT
+
+正式 Android 听书使用 [litert-community/Audio8-TTS-Realistic-0.6b](https://huggingface.co/litert-community/Audio8-TTS-Realistic-0.6b) 固定提交 `dcf477032785f2dda4af08c89a0de8509e511c6f` 的模型（Apache-2.0）和 Android/Python 示例（MIT）。改动包括应用包名、暂停/取消/提示抢占检查、模型下载、缓存与播放器集成。原许可及模型 NOTICE 位于 `android/app/src/main/assets/tts/audio8/`，Python 参考循环许可在 `tools/audio8/LICENSE-MIT.txt`。参考音色来自 Qwen3-TTS 移动端发布方的合成示例，具体来源与校验值保留于 voice-meta.json。
+
+Google LiteRT 2.2.0（Apache-2.0）提供 Android CPU/GPU 推理，其 AAR 保留上游 LICENSE 与 THIRD_PARTY_NOTICE。模型权重单独下载。
+
+以下为历史实现和测试资料，ONNX Runtime、MNN、SentencePiece JNI 与 Silero 模型不进入 0.3.15 正式 APK 的听书推理路径。
+
 ## MOSS-TTS-Nano
 
 纸间的 Android ONNX 推理代码改编自 OpenMOSS 官方示例，参考版本 `8b7bcc9341b3b4ef3a3a58ba1338a7d85ff133eb`。改动包括 SentencePiece JNI 接入、取消/资源清理、音频缓存和播放器集成。
 
 项目来源：<https://github.com/OpenMOSS/MOSS-TTS-Nano>
 
-许可证：Apache License 2.0，全文见 [licenses/MOSS-TTS-Nano-APACHE-2.0.txt](licenses/MOSS-TTS-Nano-APACHE-2.0.txt)。模型权重不随应用分发，按 App 中的固定版本下载。
+许可证：Apache License 2.0，全文见 [licenses/MOSS-TTS-Nano-APACHE-2.0.txt](licenses/MOSS-TTS-Nano-APACHE-2.0.txt)。历史模型权重不随应用分发。
 
 ## SentencePiece
 
@@ -14,7 +22,7 @@ Google SentencePiece 0.2.1 以源代码形式用于原生分词。原始许可�
 
 ## Silero VAD
 
-Silero VAD（MIT）用于首尾语音活动检测。固定提交 `1e261b036686cd0017d500ee96acd1c4ba572a9d` 的 `silero_vad_16k_op15.onnx` 随 APK 提供，大小 1,289,603 bytes，SHA-256 `7ed98ddbad84ccac4cd0aeb3099049280713df825c610a8ed34543318f1b2c49`。原项目：<https://github.com/snakers4/silero-vad>；许可证保留在 `android/app/src/main/assets/tts/SILERO-LICENSE.txt`。
+Silero VAD（MIT）用于首尾语音活动检测。固定提交 `1e261b036686cd0017d500ee96acd1c4ba572a9d` 的 `silero_vad_16k_op15.onnx` 历史版本随 APK 提供，大小 1,289,603 bytes，SHA-256 `7ed98ddbad84ccac4cd0aeb3099049280713df825c610a8ed34543318f1b2c49`。原项目：<https://github.com/snakers4/silero-vad>；许可证保留在 `android/app/src/main/assets/tts/SILERO-LICENSE.txt`。
 
 ## 运行时依赖
 

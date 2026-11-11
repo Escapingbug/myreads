@@ -2,7 +2,7 @@
 
 Android 小说阅读器，支持动态书源、搜索、章节下载、离线阅读和本地听书。
 
-[国内下载 APK](https://gitee.com/anciety/myreads/releases/latest) · [GitHub 备用下载](https://github.com/escapingbug/myreads/releases/latest) · [版本说明](docs/releases/0.3.14.md)
+[国内下载 APK](https://gitee.com/anciety/myreads/releases/latest) · [GitHub 备用下载](https://github.com/escapingbug/myreads/releases/latest) · [版本说明](docs/releases/0.3.15.md)
 
 ## 使用
 
@@ -10,23 +10,17 @@ Android 小说阅读器，支持动态书源、搜索、章节下载、离线阅
 
 - 在「搜索」选择书源，搜索书名并下载章节；「书架」打开已保存小说离线阅读。
 - 在「书源」导入 ZIP / JSON / HTTPS 书源包。书源包含脚本，请选择可信来源。
-- 「听书」页点击下载 MOSS-TTS-Nano ONNX 模型（约 686 MiB），下载后可离线听书。大型听书模型单独下载，小型 VAD 文件随 APK 提供。阅读器的耳机按钮可从当前段落开始，支持六种声音、倍速及后台播放。
+- 「听书」页下载 Audio8 Realistic Air 模型（约 1.16 GB），下载后可离线听书。首次加载会另外生成权重缓存，建议预留至少 2 GB 空间。阅读器的耳机按钮可从当前段落开始，支持自然中文、中英混读、倍速及后台播放。
 - 「设置 → 语音无障碍模式」由协助者首次配置，先下载并加载本地语音模型。进入后自动接着上次的书听，没有记录时介绍推荐书。喜欢点“就听这本”，不喜欢点“换一本”，应用自动准备章节后开播。播放页提供暂停/继续、换一本和更多功能，不需要先学会搜索或操作书架。右上角始终可退出，底部有返回和帮助。
 - 书架、搜索、读听历史、章节和语速放在“更多功能”。搜书支持输入框与可修改的语音输入，结果显示书名/作者与翻页。语音输入需要手机的语音识别服务和麦克风权限，不是使用推荐的必要条件。提示与正文共用本地模型，首次生成可能等待，重复提示使用缓存。
-- 听书采用固定版本的官方 ONNX 生成流程，由模型处理内部标点节奏，每块使用固定音色参考。普通与无障碍听书使用同一流程。默认边生成边播放，首块完成即可开始，后台继续生成；也可手动选择先准备本章。暂停同时挂起生成，缓存可直接回放。重新开始时从上次朗读块开头继续。起播与队列耗尽后重新起播有约半秒静音保护。本地合成仍比播放普通音频更耗电。
+- 听书采用固定版本的 Audio8 LiteRT 移动端模型，由模型处理内部标点节奏，每块使用固定音色参考。普通与无障碍听书使用同一流程。默认边生成边播放，首块完成即可开始，后台继续生成；也可手动选择先准备本章。暂停同时挂起生成，缓存可直接回放。重新开始时从上次朗读块开头继续。起播与队列耗尽后重新起播有约半秒静音保护。本地合成仍比播放普通音频更耗电。
 - 右上角「设置 → 应用更新」手动检查更新。默认每天在打开应用时自动检查 Gitee 和 GitHub 正式版本；同版本优先 Gitee，下载失败自动切换同一安装包的备用来源，也可手动固定来源。下载 APK 后按 Android 提示允许安装并确认。更新保留书架、阅读进度和模型。
 
 0.2.x 的用户首次需要手动覆盖安装 0.3.0；后续版本可从 App 内更新。无需卸载。
 
-## 0.3.14 听书兼容性修复
+## 0.3.15 Audio8 听书
 
-修复0.3.13开始听书时出现“UNICODE_CHARACTER_CLASS flag not supported”并停止的问题。保留官方生成流程和已有模型，无需清理书架或重新下载模型。
-
-GitHub 与 Gitee 均已正式发布。可[直接下载 Gitee 0.3.14 APK](https://gitee.com/anciety/myreads/releases/download/v0.3.14/zijian-0.3.14.apk)，或在应用更新中选择“自动”／“Gitee”检查更新。
-
-## 0.3.13 官方听书流程
-
-针对句内语速不一致、异常停顿和重复朗读，将正文生成迁移到实际试听效果更好的完整官方 ONNX 流程。更新会重新生成语音缓存，已下载模型、书架和阅读进度保留；不再提供“跨句衔接”开关。具体变化见[版本说明](docs/releases/0.3.14.md)。
+正式听书切换为此前试听的 Audio8 Realistic Air 0.6B 移动端模型。升级保留书架、进度和倍速偏好，需要重新下载约 1.16 GB 的模型。生成速度与持续耗电尚未完成实体手机测量，较慢设备仍可能出现等待。见[版本说明](docs/releases/0.3.15.md)与[引擎说明](docs/tts-audio8.md)。
 
 ## 0.3.12 推荐与简单听书
 
@@ -36,7 +30,7 @@ GitHub 与 Gitee 均已正式发布。可[直接下载 Gitee 0.3.14 APK](https:/
 
 Node.js 24、JDK 21、Android SDK 36、NDK 28.2.13676358、CMake 3.22.1。
 
-0.3.13 使用官方文本规则、75 token 分块、固定音色独立生成和整章连续采样，移除了“跨句衔接”设置，并保存恢复播放所需的分块与采样状态。迁移依据及验证记录见 [HANDOFF.md](HANDOFF.md)。
+0.3.15 使用 Audio8 的 LiteRT Kotlin 推理循环，单次输入最多 49 token。旧引擎资料保留作历史主机测试。实现及验证边界见 [引擎说明](docs/tts-audio8.md)。
 
 ```sh
 npm ci
@@ -65,6 +59,6 @@ npm run android:build
 
 ## 开源组件
 
-听书方案：[OpenMOSS/MOSS-TTS-Nano](https://github.com/OpenMOSS/MOSS-TTS-Nano)（Apache-2.0）；模型按固定版本下载并验证 SHA-256。原生分词使用 SentencePiece 0.2.1，其许可证和作者信息保留在 `android/app/src/main/cpp/vendor/sentencepiece/`。0.3.13 使用 WeTextProcessing 1.2.0 文本规则与固定源码的 OpenFst 核心（均 Apache-2.0），相关许可证随 APK 提供。音频推理由 ONNX Runtime 1.23.2 提供，播放使用 AndroidX Media3。0.3.12 使用的 [Silero VAD](https://github.com/snakers4/silero-vad)（MIT）及许可证仍保留；0.3.13 保留官方生成的完整 PCM，不再执行 VAD 裁剪。
+听书模型：[Audio8 Realistic Air](https://huggingface.co/litert-community/Audio8-TTS-Realistic-0.6b)（Apache-2.0），固定版本按 SHA-256 校验；Android 实现改编自其 MIT 示例，运行时使用 Google LiteRT，播放使用 AndroidX Media3。历史 MOSS、SentencePiece、OpenFst 与 Bert 测试资料保留原声明，但不进入正式听书推理路径。
 
-其他主要依赖：Vue、Capacitor、SQLite、Vite。详细实现与已完成验证见 [HANDOFF.md](HANDOFF.md)。本轮通过主机真实模型对照、单元测试和 APK 静态检查验证；听书性能、后台连续播放与端到端听感仍待实体手机验证。
+其他依赖：Vue、Capacitor、SQLite、Vite。第三方声明见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。

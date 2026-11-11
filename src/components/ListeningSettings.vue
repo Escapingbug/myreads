@@ -11,7 +11,7 @@ const labels = { missing: "尚未下载", downloading: "正在下载", verifying
   <section class="listen-model-card" aria-label="听书模型管理">
     <div class="listen-model-heading">
       <span class="source-symbol"><Headphones :size="23" /></span>
-      <div><h2>中文离线听书</h2><span class="muted">Bert-VITS2 · {{ formatModelSize(tts.model.total) }}</span></div>
+      <div><h2>中文离线听书</h2><span class="muted">Audio8 · {{ formatModelSize(tts.model.total) }}</span></div>
     </div>
     <p>点击下载声音模型，之后无需联网就能朗读已下载的小说。首次下载建议使用 Wi-Fi。</p>
     <p class="muted">声音在手机上生成，会比播放普通音频更耗电。暂停听书也会暂停生成；已有缓存的片段可直接播放。</p>

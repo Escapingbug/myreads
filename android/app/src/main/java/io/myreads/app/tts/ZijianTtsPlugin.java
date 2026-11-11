@@ -18,7 +18,7 @@ import java.util.concurrent.*;
 })
 public final class ZijianTtsPlugin extends Plugin {
     private final ExecutorService files = Executors.newSingleThreadExecutor();
-    private static final Set<String> VOICES = new HashSet<>(Arrays.asList("bili22"));
+    private static final Set<String> VOICES = new HashSet<>(Arrays.asList("audio8-zh"));
     @Override public void load() { TtsEvents.attach(this); }
     void publish(String event, JSObject status) { notifyListeners(event, status); }
     @PluginMethod public void getStatus(PluginCall call) {
@@ -60,7 +60,9 @@ public final class ZijianTtsPlugin extends Plugin {
             if (BookPlaybackService.current != null) BookPlaybackService.current.stopPlayback();
             files.execute(() -> {
                 try {
-                    new ModelRepository(getContext()).remove();
+                    ModelRepository repository = new ModelRepository(getContext());
+                    repository.remove();
+                    ModelRepository.delete(new File(getContext().getCacheDir(), "audio8/" + repository.id));
                     ModelRepository.delete(new File(getContext().getCacheDir(), "tts"));
                     call.resolve();
                 } catch (Exception error) { call.reject(error.getMessage(), error); }
@@ -75,7 +77,7 @@ public final class ZijianTtsPlugin extends Plugin {
             try {
                 if (!new ModelRepository(getContext()).ready()) throw new IllegalStateException("请先下载听书模型");
                 String id = call.getString("bookId", "");
-                String voice = call.getString("voice", "bili22");
+                String voice = call.getString("voice", "audio8-zh");
                 if (!id.matches("[a-zA-Z0-9-]{1,100}") || !VOICES.contains(voice)) throw new IllegalArgumentException("听书参数无效");
                 JSONArray chapters = call.getArray("chapters");
                 int chapter = call.getInt("chapter", 0), paragraph = call.getInt("paragraph", 0);
