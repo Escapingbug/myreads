@@ -5,9 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 const execute = promisify(execFile);
 
-// curl negotiates HTTP/2 where available and has one explicit upload deadline.
+// Use HTTP/1.1 without Expect: 100-continue for the Gitee upload gateway.
 // Authorization is read from a private temporary file, never command arguments.
-export function giteeTransport({ fetcher = fetch, timeoutMs = 15 * 60_000, allowHttp = false } = {}) {
+export function giteeTransport({ fetcher = fetch, timeoutMs = 5 * 60_000, allowHttp = false } = {}) {
   return async function transport(url, options = {}) {
     if (!(options.body instanceof FormData)) return fetcher(url, options);
     const parsed = new URL(url);
@@ -21,7 +21,7 @@ export function giteeTransport({ fetcher = fetch, timeoutMs = 15 * 60_000, allow
       await writeFile(input, Buffer.from(await file.arrayBuffer()), { mode: 0o600 });
       await writeFile(headers, Object.entries(options.headers || {}).map(([name, value]) => `${name}: ${value}`).join('\n') + '\n', { mode: 0o600 });
       await writeFile(output, '', { mode: 0o600 });
-      const args = ['--silent', '--show-error', '--proto', allowHttp ? '=http,https' : '=https', '--connect-timeout', '30',
+      const args = ['--silent', '--show-error', '--http1.1', '--header', 'Expect:', '--proto', allowHttp ? '=http,https' : '=https', '--connect-timeout', '30',
         '--max-time', String(timeoutMs / 1000), '--max-filesize', '1048576', '--request', 'POST', '--header', '@' + headers,
         '--form', `file=@${input};filename=${file.name}`, '--output', output, '--write-out', '%{http_code} %{size_upload} %{time_total}', url];
       let stats;

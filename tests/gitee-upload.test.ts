@@ -22,6 +22,8 @@ describe("Gitee multipart transport", () => {
       const bytes = Buffer.concat(chunks);
       expect(Number(req.headers["content-length"])).toBe(bytes.length);
       expect(req.headers.authorization).toBe("Bearer test-token");
+      expect(req.httpVersion).toBe("1.1");
+      expect(req.headers.expect).toBeUndefined();
       expect(req.headers["content-type"]).toContain("multipart/form-data; boundary=");
       expect(bytes.toString()).toContain('filename="zijian-0.3.11.apk"');
       expect(bytes.toString()).toContain("signed-apk-bytes");
