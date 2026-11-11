@@ -48,8 +48,8 @@ public final class ModelDownloadService extends Service {
             repository = new ModelRepository(this);
             repository.root.mkdirs();
             long remaining = repository.total - repository.downloaded();
-            if (repository.root.getUsableSpace() < remaining + 128L * 1024 * 1024)
-                throw new IOException("存储空间不足，请至少留出 " + ((remaining / 1024 / 1024) + 128) + " MiB");
+            if (repository.root.getUsableSpace() < remaining + 512L * 1024 * 1024)
+                throw new IOException("存储空间不足，请至少留出 " + ((remaining / 1024 / 1024) + 512) + " MiB");
             repository.update("downloading", "", "");
             boolean preferOfficial = false;
             for (ModelRepository.Entry entry : repository.files) {

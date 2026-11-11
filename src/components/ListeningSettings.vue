@@ -13,7 +13,7 @@ const labels = { missing: "尚未下载", downloading: "正在下载", verifying
       <span class="source-symbol"><Headphones :size="23" /></span>
       <div><h2>中文离线听书</h2><span class="muted">Audio8 · {{ formatModelSize(tts.model.total) }}</span></div>
     </div>
-    <p>点击下载声音模型，之后无需联网就能朗读已下载的小说。首次下载建议使用 Wi-Fi。</p>
+    <p>点击下载声音模型，之后无需联网就能朗读已下载的小说。首次下载建议使用 Wi-Fi，并预留至少 2 GB 可用空间。</p>
     <p class="muted">声音在手机上生成，会比播放普通音频更耗电。暂停听书也会暂停生成；已有缓存的片段可直接播放。</p>
     <div class="listen-model-status" role="status">
       <CheckCircle2 v-if="tts.model.phase === 'ready'" :size="17" />
@@ -29,6 +29,14 @@ const labels = { missing: "尚未下载", downloading: "正在下载", verifying
     <p v-if="tts.model.error" class="download-error" role="alert">{{ tts.model.error }}</p>
     <p v-if="!tts.supported" class="inline-message">在 Android App 中下载并使用本地听书。</p>
     <p v-if="tts.model.phase !== 'ready'" class="muted">新声音需要重新下载模型，原来的声音模型不能通用。下载中断后可以继续。</p>
+    <div v-if="tts.model.phase !== 'ready'" class="listen-download-source">
+      <label for="listen-source">模型下载来源</label>
+      <select id="listen-source" v-model="tts.modelSource" :disabled="downloading" @change="ttsAction(saveTtsOptions)">
+        <option value="auto">自动（国内镜像优先）</option>
+        <option value="mirror">国内镜像</option>
+        <option value="official">Hugging Face</option>
+      </select>
+    </div>
     <div class="download-actions">
       <button v-if="downloading" class="button secondary" :disabled="tts.busy" @click="ttsAction(pauseModelDownload)"><Pause :size="17" />暂停下载</button>
       <button v-else-if="tts.model.phase !== 'ready'" class="button" :disabled="!tts.supported || tts.busy || !tts.initialized" @click="ttsAction(downloadModel)">
